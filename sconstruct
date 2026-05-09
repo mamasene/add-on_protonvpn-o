@@ -1,0 +1,191 @@
+# -*- coding: utf-8 -*-
+"""
+SCons build script for NVDA ExpressVPN Accessibility Add-on.
+Based on the official NVDA Add-on Template.
+
+Usage:
+    scons           - Build the .nvda-addon package
+    scons -c        - Clean build artifacts
+"""
+
+import os
+import sys
+import zipfile
+from pathlib import Path
+
+# Prevent bytecode from being written
+sys.dont_write_bytecode = True
+
+# Import SCons functions
+from SCons.Script import Environment, Command, Depends, Default, Clean, Alias
+
+# Import build configuration
+import buildVars
+
+# Directories
+ADDON_DIR = Path("addon")
+DOC_DIR = ADDON_DIR / "doc"
+
+def build_addon(target, source, env):
+    """
+    Build the .nvda-addon package (ZIP file with specific structure).
+    """
+    addon_file = str(target[0])
+    addon_dir = str(source[0])
+    
+    print(f"Building {addon_file}...")
+    
+    with zipfile.ZipFile(addon_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+        addon_path = Path(addon_dir)
+        for file_path in addon_path.rglob('*'):
+            if file_path.is_file():
+                # Skip excluded files
+                skip = False
+                for pattern in buildVars.excludedFiles:
+                    if pattern.replace('*', '') in str(file_path):
+                        skip = True
+                        break
+                if not skip:
+                    arcname = file_path.relative_to(addon_path)
+                    zf.write(file_path, arcname)
+                    print(f"  Added: {arcname}")
+    
+    print(f"Successfully created: {addon_file}")
+    return 0
+
+def generate_manifest(target, source, env):
+    """
+    Generate manifest.ini from template and buildVars.
+    """
+    template_file = str(source[0])
+    manifest_file = str(target[0])
+    
+    print(f"Generating {manifest_file} from {template_file}...")
+    
+    with open(template_file, 'r', encoding='utf-8') as f:
+        template = f.read()
+    
+    # Replace placeholders with values from addon_info
+    info = buildVars.addon_info
+    manifest = template.format(
+        addon_name=info.get("addon_name", ""),
+        addon_summary=info.get("addon_summary", ""),
+        addon_description=info.get("addon_description", ""),
+        addon_author=info.get("addon_author", ""),
+        addon_url=info.get("addon_url", "") or "None",
+        addon_version=info.get("addon_version", ""),
+        addon_changelog=info.get("addon_changelog", ""),
+        addon_docFileName=info.get("addon_docFileName", "readme.html"),
+        addon_minimumNVDAVersion=info.get("addon_minimumNVDAVersion", "2023.1.0"),
+        addon_lastTestedNVDAVersion=info.get("addon_lastTestedNVDAVersion", "2025.1.0"),
+        addon_updateChannel=info.get("addon_updateChannel", "") or "None",
+    )
+    
+    with open(manifest_file, 'w', encoding='utf-8') as f:
+        f.write(manifest)
+    
+    print(f"Generated: {manifest_file}")
+    return 0
+
+def copy_readme_to_html(target, source, env):
+    """
+    Copy readme.md as readme.html (simple conversion).
+    For a real project, use a proper markdown to HTML converter.
+    """
+    import shutil
+    source_file = str(source[0])
+    target_file = str(target[0])
+    
+    # Create target directory if needed
+    os.makedirs(os.path.dirname(target_file), exist_ok=True)
+    
+    # Read markdown and wrap in basic HTML
+    with open(source_file, 'r', encoding='utf-8') as f:
+        content = f.read()
+    
+    # Simple HTML wrapper
+    html = f"""<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>{buildVars.addon_info['addon_summary']}</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; margin: 2em; line-height: 1.6; }}
+        h1, h2, h3 {{ color: #333; }}
+        code {{ background: #f4f4f4; padding: 2px 5px; }}
+        pre {{ background: #f4f4f4; padding: 1em; overflow-x: auto; }}
+    </style>
+</head>
+<body>
+<pre>{content}</pre>
+</body>
+</html>"""
+    
+    with open(target_file, 'w', encoding='utf-8') as f:
+        f.write(html)
+    
+    print(f"Generated HTML doc: {target_file}")
+    return 0
+
+# Create build environment
+env = Environment(ENV=os.environ)
+
+# Get addon info
+addon_name = buildVars.addon_info["addon_name"]
+addon_version = buildVars.addon_info["addon_version"]
+
+# Target file name
+addon_filename = f"{addon_name}-{addon_version}.nvda-addon"
+
+# Generate manifest.ini in addon folder
+manifest_target = str(ADDON_DIR / "manifest.ini")
+manifest = Command(
+    manifest_target,
+    "manifest.ini.tpl",
+    generate_manifest
+)
+Depends(manifest, "buildVars.py")
+
+# Generate HTML documentation
+doc_en_dir = DOC_DIR / buildVars.baseLanguage
+readme_html = str(doc_en_dir / "readme.html")
+if os.path.exists("readme.md"):
+    doc = Command(
+        readme_html,
+        "readme.md",
+        copy_readme_to_html
+    )
+    Depends(doc, "readme.md")
+
+# Build the addon package
+addon = Command(
+    addon_filename,
+    str(ADDON_DIR),
+    build_addon
+)
+Depends(addon, manifest)
+if os.path.exists("readme.md"):
+    Depends(addon, readme_html)
+
+# Set as default target
+Default(addon)
+
+# Clean target
+Clean(addon, [
+    addon_filename,
+    manifest_target,
+    readme_html,
+    ".sconsign.dblite",
+])
+
+# Alias for convenience
+Alias("build", addon)
+Alias("manifest", manifest)
+
+print(f"""
+=== NVDA Add-on Build Configuration ===
+Add-on Name: {addon_name}
+Version: {addon_version}
+Output: {addon_filename}
+=====================================
+""")

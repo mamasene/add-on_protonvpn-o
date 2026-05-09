@@ -1,0 +1,146 @@
+# French translations for protonVPNAccessibility NVDA add-on.
+# Copyright (C) 2026 Mama Sene
+# This file is distributed under the same license as the protonVPNAccessibility package.
+# Mama Sene <tech.access33@gmail.com>, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: protonVPNAccessibility 1.0.0\n"
+"PO-Revision-Date: 2026-05-10\n"
+"Last-Translator: Mama Sene <tech.access33@gmail.com>\n"
+"Language-Team: French\n"
+"Language: fr\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+# --- Noms des boutons de connexion ---
+msgid "Disconnect VPN"
+msgstr "Déconnecter le VPN"
+
+msgid "Connect VPN"
+msgstr "Connecter le VPN"
+
+msgid "VPN connection button"
+msgstr "Bouton connexion VPN"
+
+# --- Boutons LocationDetailsPage (IP / Pays / Fournisseur) ---
+msgid "Your IP address"
+msgstr "Votre adresse IP"
+
+msgid "Country"
+msgstr "Pays"
+
+msgid "Provider"
+msgstr "Fournisseur"
+
+msgid "VPN information"
+msgstr "Information VPN"
+
+# --- Boutons ConnectionDetailsPage (VPN connecté) ---
+msgid "VPN IP address"
+msgstr "Adresse IP du VPN"
+
+msgid "Total traffic"
+msgstr "Trafic total"
+
+msgid "Current traffic (KB/s)"
+msgstr "Trafic actuel (Ko/s)"
+
+msgid "VPN info"
+msgstr "Info VPN"
+
+# --- Bouton promo VPN Plus ---
+msgid "VPN Plus offer"
+msgstr "Offre VPN Plus"
+
+msgid "Upgrade to VPN Plus"
+msgstr "Passer à VPN Plus"
+
+# --- Widgets colonne droite ---
+msgid "NetShield"
+msgstr "NetShield"
+
+msgid "Kill Switch"
+msgstr "Arrêt d'urgence (Kill switch)"
+
+msgid "Split tunneling"
+msgstr "Split tunneling"
+
+msgid "Widget {}"
+msgstr "Widget {}"
+
+# --- Boutons avec AutomationId spécifique ---
+msgid "Port forwarding"
+msgstr "Redirection de port"
+
+msgid "Settings"
+msgstr "Paramètres"
+
+msgid "Main menu"
+msgstr "Menu principal"
+
+msgid "Button {}"
+msgstr "Bouton {}"
+
+msgid "ProtonVPN button"
+msgstr "Bouton ProtonVPN"
+
+msgid "ProtonVPN widget button"
+msgstr "Bouton widget ProtonVPN"
+
+# --- Bouton générique fallback ---
+msgid "Unnamed button"
+msgstr "Bouton sans nom"
+
+msgid "Button ({})"
+msgstr "Bouton ({})"
+
+# --- Messages d'état (debug) ---
+msgid "ProtonVPN add-on active"
+msgstr "Add-on ProtonVPN actif"
+
+# --- Messages vocaux : actions VPN ---
+msgid "Connection button not found"
+msgstr "Bouton connexion introuvable"
+
+msgid "Disconnecting"
+msgstr "Déconnexion"
+
+msgid "Connecting"
+msgstr "Connexion"
+
+msgid "Action unavailable"
+msgstr "Action indisponible"
+
+msgid "VPN disconnected"
+msgstr "VPN déconnecté"
+
+msgid "VPN connected"
+msgstr "VPN connecté"
+
+msgid "Kill Switch not found"
+msgstr "Kill Switch introuvable"
+
+msgid "Country selector"
+msgstr "Sélecteur de pays"
+
+msgid "Country selector not found"
+msgstr "Sélecteur de pays introuvable"
+
+msgid "Traffic information unavailable. VPN not connected?"
+msgstr "Informations de trafic indisponibles. VPN non connecté ?"
+
+# --- Descriptions des raccourcis (Input Gestures dialog) ---
+msgid "Toggle VPN connection"
+msgstr "Connecter ou déconnecter le VPN"
+
+msgid "Toggle Kill Switch"
+msgstr "Activer ou désactiver le Kill Switch"
+
+msgid "Open country selector"
+msgstr "Ouvrir le sélecteur de pays"
+
+msgid "Announce traffic information"
+msgstr "Annoncer les informations de trafic"

@@ -1,0 +1,29 @@
+# NVDA Add-on Build Artifacts
+*.nvda-addon
+*.pyc
+__pycache__/
+*.pyo
+.sconsign.dblite
+*.pot
+*.mo
+
+# IDE
+.vscode/
+.idea/
+*.sublime-*
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Generated files
+addon/manifest.ini
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~
+.claude/
+CLAUDE.md
