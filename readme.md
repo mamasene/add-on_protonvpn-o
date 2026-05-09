@@ -1,18 +1,32 @@
 ProtonVPN Accessibility for NVDA
+
 Author: Mama Sene
 Contact: tech.access33@gmail.com
+
 Download stable version
 Source code on GitHub
-NVDA compatibility: 2023.1 and later
+
+NVDA compatibility:
+- Minimum version: 2025.1
+- Tested with: NVDA 2026.1
 
 Presentation
 
 This add-on improves the accessibility of the ProtonVPN Windows application for NVDA users.
 
-It provides:
+Features include:
 - Proper labeling of interface elements
-- Spoken information about VPN status (IP address, country, provider, traffic)
+- Dynamic spoken information about VPN status
+- Accessibility improvements for UI Automation controls
 - Keyboard shortcuts for common VPN actions
+- Multilingual support (English and French)
+
+The add-on can announce:
+- IP address
+- Country
+- VPN provider
+- Traffic information
+- Connection status
 
 Usage
 
@@ -22,6 +36,7 @@ The add-on automatically enhances:
 - Buttons and controls labeling
 - Connection status announcements
 - Traffic and network information
+- Accessibility of dynamic UI elements
 
 Keyboard Shortcuts
 
@@ -33,7 +48,7 @@ Keyboard Shortcuts
 Notes
 
 The spoken messages (IP address, country, provider, traffic) are dynamic.
-They depend on the current VPN connection state and available data.
+They depend on the current VPN connection state and available data provided by ProtonVPN.
 
 This add-on does not send any data and works entirely locally.
 
@@ -42,7 +57,11 @@ This is a community add-on and is not affiliated with Proton AG.
 Changes
 
 Version 1.0.0
-- Initial stable release
+- Initial stable release  
+- Added NVDA 2026.1 compatibility
+- Added Python 3.13 compatibility
 - Improved ProtonVPN interface accessibility
 - Added keyboard shortcuts
 - Added dynamic announcements for VPN status
+- Added multilingual documentation support
+- Added French translations
