@@ -5,7 +5,7 @@ $ErrorActionPreference = "Stop"
 
 # Configuration
 $addonName = "protonVPNAccessibility"
-$addonVersion = "1.0.0"
+$addonVersion = "1.0.1"
 $outputFile = "$addonName-$addonVersion.nvda-addon"
 
 Write-Host "=== NVDA Add-on Build Script ===" -ForegroundColor Cyan
@@ -71,7 +71,9 @@ Write-Host "=== Build Complete ===" -ForegroundColor Green
 Write-Host "Output: $outputFile"
 Write-Host ""
 Write-Host "Installation NVDA:"
-Write-Host "1. NVDA → Outils → Gérer les modules complémentaires"
-Write-Host "2. Installer..."
-Write-Host "3. Sélectionner: $outputFile"
-Write-Host "4. Redémarrer NVDA"
+Write-Host "1. Ouvrir le menu NVDA"
+Write-Host "2. Aller dans Outils → Add-on Store"
+Write-Host "3. Accéder à l'onglet Extensions disponibles"
+Write-Host "4. Rechercher : ProtonVPN Accessibility"
+Write-Host "5. Sélectionner l'extension puis choisir Installer"
+Write-Host "6. Redémarrer NVDA"
