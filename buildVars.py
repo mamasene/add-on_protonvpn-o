@@ -7,29 +7,37 @@ Ce fichier est utilisé par SCons pour générer le package .nvda-addon.
 # Informations de l'add-on
 addon_info = {
     "addon_name": "protonVPNAccessibility",
-    "addon_summary": "Amélioration de l'accessibilité de ProtonVPN",
-    "addon_description": """Améliore l'accessibilité de l'application ProtonVPN pour Windows avec NVDA.
+    "addon_summary": "ProtonVPN Accessibility",
+    "addon_description": """Improves accessibility of the ProtonVPN Windows application for NVDA users.
 
-Fonctionnalités principales :
-- Labellisation des boutons et contrôles (Connecter, Déconnecter, widgets)
-- Annonces dynamiques : Label + Valeur (IP, pays, fournisseur, trafic)
-- Raccourcis clavier pour actions rapides (Ctrl+Shift+D/K/C/T)
-- Support VPN connecté : IP VPN, trafic total, trafic en temps réel
+Main features:
+- Proper labeling of buttons and controls
+- Dynamic announcements for VPN status information
+- Announcements for IP address, country, provider and traffic
+- Keyboard shortcuts for quick actions
+- French and English documentation
 
-Projet communautaire non affilié à Proton AG.""",
-    "addon_version": "1.0.0",
-    "addon_changelog": """Version 1.0.0 :
-- Labellisation complète des contrôles ProtonVPN
-- Extraction dynamique des valeurs (IP, pays, fournisseur, trafic)
-- Raccourcis : Ctrl+Shift+D (VPN), K (Kill Switch), C (Pays), T (Trafic)
-- Documentation HTML embarquée (FR/EN)""",
+This is a community add-on and is not affiliated with Proton AG.""",
+    "addon_version": "1.0.1",
+    "addon_changelog": """Version 1.0.1:
+- Updated add-on display name for international users
+- Fixed project repository URL
+- Improved manifest metadata
+- Updated French translation metadata
+
+Version 1.0.0:
+- Initial stable release
+- Improved ProtonVPN interface accessibility
+- Added keyboard shortcuts
+- Added dynamic announcements for VPN status
+- Added French and English documentation""",
     "addon_author": "Mama Sene <tech.access33@gmail.com>",
-    "addon_url": "https://github.com/mamasene/add-on_protonvpn",
-    "addon_sourceURL": "https://github.com/mamasene/add-on_protonvpn",
+    "addon_url": "https://github.com/mamasene/add-on_protonvpn-o",
+    "addon_sourceURL": "https://github.com/mamasene/add-on_protonvpn-o",
     "addon_docFileName": "readme.html",
     "addon_minimumNVDAVersion": "2025.1",
     "addon_lastTestedNVDAVersion": "2026.1",
-    "addon_updateChannel": None,
+    "addon_updateChannel": "stable",
     "addon_license": "GPL v2",
     "addon_licenseURL": "https://www.gnu.org/licenses/gpl-2.0.html",
 }
