@@ -69,6 +69,32 @@ WIDGET_STATE_OFF = frozenset((
     "off", "inactif", "inactive", "désactivé", "désactivée", "disabled", "deactivated",
 ))
 
+# Widgets de la colonne droite, identifiés par le texte qu'ils affichent.
+# L'ordre de la colonne varie selon l'offre et la version de ProtonVPN :
+# l'identité d'un widget ne doit jamais être déduite de sa position.
+WIDGET_DEFINITIONS = (
+    (("netshield", "net shield"), _("NetShield")),
+    (KILL_SWITCH_KEYWORDS, _("Kill Switch")),
+    (("split tunneling", "tunnel divisé", "tunnelage divisé"), _("Split tunneling")),
+    (("port forwarding", "redirection de port"), _("Port forwarding")),
+)
+
+# Repli pour le bouton principal quand les AutomationId attendus sont absents.
+# Recherche par sous-chaîne, réservée aux boutons de la carte de connexion.
+DISCONNECT_KEYWORDS = ("disconnect", "déconnecter")
+CONNECT_KEYWORDS = ("connect", "connecter")
+
+# Second repli, hors carte de connexion : le libellé complet doit correspondre.
+# « Connection details » ne vaut pas « connect », contrairement à une recherche
+# par sous-chaîne qui retiendrait n'importe quel bouton contenant ce fragment.
+DISCONNECT_LABELS = frozenset(("disconnect", "déconnecter", "se déconnecter"))
+CONNECT_LABELS = frozenset(("connect", "connecter", "se connecter"))
+
+# Confirmation d'état après action : une connexion ProtonVPN dépasse souvent
+# une seconde et demie, il faut donc sonder plusieurs fois.
+VPN_STATE_POLL_MS = 1200
+VPN_STATE_MAX_ATTEMPTS = 8
+
 
 def get_addon_version():
     """Retourne la version déclarée dans le manifeste de l'add-on.
@@ -680,6 +706,50 @@ def widget_matches_keywords(obj, keywords):
         return False
 
 
+def match_widget_label(text):
+    """Retourne le libellé du widget correspondant au texte affiché, ou None.
+
+    Prend le texte en paramètre plutôt que l'objet : appelée depuis _get_name,
+    lire obj.name relancerait _get_name et boucherait indéfiniment.
+    """
+    haystack = (text or "").lower()
+    for keywords, label in WIDGET_DEFINITIONS:
+        if any(kw in haystack for kw in keywords):
+            return label
+    return None
+
+
+def is_connection_card_element(obj, max_levels=6):
+    """Vérifie que l'objet appartient à la carte de connexion.
+
+    Sans cette restriction, une recherche par libellé retiendrait n'importe quel
+    bouton de la fenêtre contenant « connect » — « Connection details »,
+    « Reconnect » — et l'add-on invoquerait le mauvais contrôle.
+    """
+    current = obj
+    for _level in range(max_levels):
+        try:
+            if get_automation_id(current).startswith("ConnectionCard"):
+                return True
+            current = current.parent
+            if not current:
+                break
+        except Exception:
+            break
+    return False
+
+
+def label_equals_any(obj, labels):
+    """Vérifie que le libellé complet de l'objet est exactement l'un des libellés."""
+    try:
+        label = (obj.name or "").strip().lower()
+        if not label:
+            label = get_all_text_descendants_as_string(obj, 3).strip().lower()
+        return label in labels
+    except Exception:
+        return False
+
+
 def get_widget_state(obj):
     """Lit l'état on/off affiché par un widget.
 
@@ -695,20 +765,6 @@ def get_widget_state(obj):
     except Exception as e:
         log.debugWarning(f"PROTONVPN: get_widget_state error: {e}")
     return None
-
-
-def count_same_type_siblings_before(obj):
-    """Compte les frères de même type avant cet objet."""
-    count = 0
-    try:
-        current = obj.previous
-        while current:
-            if current.role == obj.role:
-                count += 1
-            current = current.previous
-    except:
-        pass
-    return count
 
 
 # ============================================================================
@@ -816,40 +872,45 @@ class ProtonVPNPlusPromoButton(UIA):
 
 
 class ProtonVPNWidgetButton(UIA):
-    """Overlay pour les widgets colonne droite."""
+    """Overlay pour les widgets colonne droite (NetShield, Kill Switch, etc.).
+
+    Le libellé et l'état sont lus dans ce que le widget affiche. Aucune
+    déduction par position : l'ordre de la colonne dépend de l'offre et de la
+    version, et une étiquette fausse est plus dangereuse qu'une étiquette
+    absente puisqu'elle inspire confiance.
+    """
+
+    def _get_widgetState(self):
+        """État on/off du widget. NVDA met la valeur en cache pour le cycle."""
+        return get_widget_state(self)
 
     def _get_name(self):
         original_name = super().name or ""
+        displayed = original_name + " " + get_all_text_descendants_as_string(self, 4)
 
-        if original_name and len(original_name.strip()) > 2:
-            if original_name not in (_("ProtonVPN widget button"), _("ProtonVPN button"), _("Unnamed button")):
-                return original_name
+        label = match_widget_label(displayed)
 
-        index = count_same_type_siblings_before(self)
+        if label is None:
+            # Widget non reconnu : conserver ce que fournit l'application.
+            label = original_name.strip() or _("ProtonVPN button")
 
-        if index == 0:
-            label = _("NetShield")
-        elif index == 1:
-            label = _("Kill Switch")
-        elif index == 2:
-            label = _("Split tunneling")
-        else:
-            rect = get_bounding_rect(self)
-            if rect:
-                y = rect[1]
-                if y < 200:
-                    label = _("NetShield")
-                elif y < 400:
-                    label = _("Kill Switch")
-                else:
-                    label = _("Split tunneling")
-            else:
-                label = _("Widget {}").format(index + 1)
-        
         if DEBUG_MODE:
-            log.info(f"PROTONVPN: WidgetButton.name → \"{label}\" (index={index})")
-        
+            log.debug(f"PROTONVPN: WidgetButton.name → \"{label}\"")
+
         return label
+
+    def _get_role(self):
+        # Annoncer un bouton bascule laisse NVDA dire « activé »/« désactivé »
+        # nativement, dans toutes les langues et en braille.
+        if self.widgetState is not None:
+            return controlTypes.Role.TOGGLEBUTTON
+        return super().role
+
+    def _get_states(self):
+        states = set(super().states)
+        if self.widgetState:
+            states.add(controlTypes.State.PRESSED)
+        return states
 
 
 class ProtonVPNSideWidgetButton(UIA):
@@ -865,9 +926,8 @@ class ProtonVPNSideWidgetButton(UIA):
         original_name = super().name or ""
         automationId = get_automation_id(self)
 
-        if original_name and len(original_name.strip()) > 0:
-            if original_name not in (_("ProtonVPN widget button"), _("ProtonVPN button")):
-                return original_name
+        if original_name.strip():
+            return original_name
 
         if automationId in self.AUTOMATION_ID_MAPPING:
             return self.AUTOMATION_ID_MAPPING[automationId]
@@ -1071,9 +1131,78 @@ class AppModule(appModuleHandler.AppModule):
         return self._invoke_via_keyboard(obj)
 
 
+    def _iter_buttons(self, max_depth=15):
+        """Énumère les boutons de la fenêtre au premier plan."""
+        buttons = []
+        fg = api.getForegroundObject()
+        if not fg:
+            return buttons
+
+        def search(obj, depth=0):
+            if depth > max_depth:
+                return
+            try:
+                if obj.role == controlTypes.Role.BUTTON:
+                    buttons.append(obj)
+                for child in obj.children:
+                    search(child, depth + 1)
+            except Exception:
+                pass
+
+        search(fg)
+        return buttons
+
+    def _find_connection_button_by_label(self):
+        """Repli : localiser le bouton principal par son libellé.
+
+        Retourne (bouton, is_disconnecting) ou None.
+
+        Deux niveaux, du plus sûr au moins sûr. D'abord les boutons de la carte
+        de connexion, où une recherche par sous-chaîne est sans danger. Ensuite,
+        hors de la carte, uniquement une correspondance de libellé complet.
+
+        Dans les deux cas, tous les candidats sont examinés pour « déconnecter »
+        avant « connecter » : le second est contenu dans le premier, et retenir
+        le premier bouton rencontré ferait passer « Connection details » pour le
+        bouton de connexion.
+        """
+        buttons = self._iter_buttons()
+
+        card = [b for b in buttons if is_connection_card_element(b)]
+        for obj in card:
+            if widget_matches_keywords(obj, DISCONNECT_KEYWORDS):
+                return obj, True
+        for obj in card:
+            if widget_matches_keywords(obj, CONNECT_KEYWORDS):
+                return obj, False
+
+        for obj in buttons:
+            if label_equals_any(obj, DISCONNECT_LABELS):
+                return obj, True
+        for obj in buttons:
+            if label_equals_any(obj, CONNECT_LABELS):
+                return obj, False
+
+        if DEBUG_MODE:
+            labels = [redact((b.name or "").strip()) for b in buttons if (b.name or "").strip()]
+            log.debug(f"PROTONVPN: no connection button matched. Buttons: {labels}")
+
+        return None
+
+    def _connection_state(self):
+        """État du VPN : True connecté, False déconnecté, None indéterminé.
+
+        Déduit du bouton présent sur la carte de connexion.
+        """
+        if self._find_element_by_automation_id("ConnectionCardDisconnectButton"):
+            return True
+        if self._find_element_by_automation_id("ConnectionCardConnectButton"):
+            return False
+        return None
+
     def script_toggleVPN(self, gesture):
         """Connecter ou déconnecter le VPN."""
-        log.info("PROTONVPN: script_toggleVPN triggered!")
+        log.debug("PROTONVPN: script_toggleVPN triggered")
         
         # Chercher d'abord le bouton Déconnecter (si VPN connecté)
         btn = self._find_element_by_automation_id("ConnectionCardDisconnectButton")
@@ -1085,32 +1214,11 @@ class AppModule(appModuleHandler.AppModule):
             is_disconnecting = False
         
         if not btn:
-            # Fallback : chercher par Name
-            log.info("PROTONVPN: Searching buttons by name...")
-            fg = api.getForegroundObject()
-            if fg:
-                def find_by_name(obj, depth=0):
-                    if depth > 15:
-                        return None
-                    try:
-                        name = (obj.name or "").lower()
-                        if obj.role == controlTypes.Role.BUTTON:
-                            if "déconnecter" in name or "disconnect" in name:
-                                return (obj, True)
-                            elif "connecter" in name or "connect" in name:
-                                return (obj, False)
-                        for child in obj.children:
-                            result = find_by_name(child, depth + 1)
-                            if result:
-                                return result
-                    except:
-                        pass
-                    return None
-                
-                result = find_by_name(fg)
-                if result:
-                    btn, is_disconnecting = result
-        
+            log.debug("PROTONVPN: AutomationId lookup failed, searching by label")
+            result = self._find_connection_button_by_label()
+            if result:
+                btn, is_disconnecting = result
+
         if not btn:
             ui.message(_("Connection button not found"))
             log.error("PROTONVPN: Neither Connect nor Disconnect button found")
@@ -1119,40 +1227,55 @@ class AppModule(appModuleHandler.AppModule):
         # Annoncer immédiatement l'action
         if is_disconnecting:
             ui.message(_("Disconnecting"))
-            log.info("PROTONVPN: Disconnecting VPN...")
+            log.debug("PROTONVPN: Disconnecting VPN")
         else:
             ui.message(_("Connecting"))
-            log.info("PROTONVPN: Connecting VPN...")
-        
+            log.debug("PROTONVPN: Connecting VPN")
+
+        # Le bouton trouvé indique l'état de départ : Déconnecter n'est présent
+        # que si le VPN est connecté. Évite un parcours d'arbre supplémentaire.
+        previous_state = is_disconnecting
+
         # Invoquer le bouton
         if self._invoke_element(btn):
-            log.info("PROTONVPN: Button invoked successfully")
+            log.debug("PROTONVPN: Button invoked successfully")
             # Lancer la confirmation d'état en différé
             try:
                 import wx
-                wx.CallLater(1500, self._confirm_vpn_state, is_disconnecting)
+                wx.CallLater(VPN_STATE_POLL_MS, self._confirm_vpn_state, previous_state)
             except:
                 # Si wx n'est pas dispo, ignorer la confirmation
                 pass
         else:
             ui.message(_("Action unavailable"))
     
-    def _confirm_vpn_state(self, was_disconnecting):
-        """Confirme l'état du VPN après l'action (appelé en différé)."""
+    def _confirm_vpn_state(self, previous_state, attempt=1):
+        """Annonce le nouvel état du VPN une fois le changement constaté.
+
+        Sonde plusieurs fois : une connexion ProtonVPN dépasse régulièrement une
+        seconde et demie. Surtout, on compare à l'état de départ au lieu de
+        tester la simple présence d'un bouton — sinon on confirmerait une
+        action qui n'a pas eu lieu.
+        """
         try:
-            # Vérifier si le bouton opposé est maintenant visible
-            if was_disconnecting:
-                # On vient de déconnecter, on devrait voir le bouton Connect
-                btn = self._find_element_by_automation_id("ConnectionCardConnectButton")
-                if btn:
-                    ui.message(_("VPN disconnected"))
-                    log.info("PROTONVPN: VPN disconnected confirmed")
-            else:
-                # On vient de connecter, on devrait voir le bouton Disconnect
-                btn = self._find_element_by_automation_id("ConnectionCardDisconnectButton")
-                if btn:
-                    ui.message(_("VPN connected"))
-                    log.info("PROTONVPN: VPN connected confirmed")
+            state = self._connection_state()
+
+            if state is not None and state != previous_state:
+                ui.message(_("VPN connected") if state else _("VPN disconnected"))
+                log.debug(f"PROTONVPN: state change confirmed after {attempt} attempt(s)")
+                return
+
+            if attempt >= VPN_STATE_MAX_ATTEMPTS:
+                # Ne pas rester muet : l'utilisateur a demandé une action et
+                # doit savoir qu'elle n'a pas abouti.
+                ui.message(_("VPN state unchanged"))
+                log.debug("PROTONVPN: no state change observed")
+                return
+
+            import wx
+            wx.CallLater(
+                VPN_STATE_POLL_MS, self._confirm_vpn_state, previous_state, attempt + 1
+            )
         except Exception as e:
             log.error(f"PROTONVPN: _confirm_vpn_state error: {e}")
     

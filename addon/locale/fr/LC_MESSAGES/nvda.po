@@ -51,6 +51,8 @@ msgid ""
 "Version 1.0.2:\n"
 "- Fixed the French translation, which was not being applied: the add-on speaks French again on French installations\n"
 "- The Kill Switch shortcut now identifies the Kill Switch before acting, and announces whether it ended up enabled or disabled. It can no longer change another setting by mistake\n"
+"- The right-hand widgets are now named after what they display instead of their position, and NVDA announces whether each one is enabled or disabled\n"
+"- The connection shortcut no longer risks activating an unrelated button, and it now reports when the VPN state did not actually change\n"
 "- IP addresses are no longer written to the NVDA log, which is often attached to bug reports\n"
 "- Buttons and switches are activated more reliably, and NVDA no longer risks freezing while ProtonVPN is connecting\n"
 "- Faster response when moving through the ProtonVPN window\n"
@@ -73,6 +75,8 @@ msgstr ""
 "Version 1.0.2 :\n"
 "- Correction de la traduction française, qui ne s'appliquait pas : l'extension parle de nouveau français sur les installations francophones\n"
 "- Le raccourci du Kill Switch identifie désormais le Kill Switch avant d'agir, et annonce s'il est activé ou désactivé. Il ne peut plus modifier un autre réglage par erreur\n"
+"- Les widgets de la colonne droite sont désormais nommés d'après ce qu'ils affichent et non d'après leur position, et NVDA annonce s'ils sont activés ou désactivés\n"
+"- Le raccourci de connexion ne risque plus d'activer un bouton sans rapport, et signale désormais lorsque l'état du VPN n'a pas changé\n"
 "- Les adresses IP ne sont plus écrites dans le journal de NVDA, souvent joint aux rapports de bug\n"
 "- Activation plus fiable des boutons et des interrupteurs ; NVDA ne risque plus de se figer pendant que ProtonVPN établit la connexion\n"
 "- Meilleure réactivité lors du parcours de la fenêtre ProtonVPN\n"
@@ -145,9 +149,6 @@ msgstr "Arrêt d'urgence (Kill switch)"
 msgid "Split tunneling"
 msgstr "Split tunneling"
 
-msgid "Widget {}"
-msgstr "Widget {}"
-
 # --- Boutons avec AutomationId spécifique ---
 msgid "Port forwarding"
 msgstr "Redirection de port"
@@ -163,9 +164,6 @@ msgstr "Bouton {}"
 
 msgid "ProtonVPN button"
 msgstr "Bouton ProtonVPN"
-
-msgid "ProtonVPN widget button"
-msgstr "Bouton widget ProtonVPN"
 
 # --- Bouton générique fallback ---
 msgid "Unnamed button"
@@ -196,6 +194,9 @@ msgstr "VPN déconnecté"
 
 msgid "VPN connected"
 msgstr "VPN connecté"
+
+msgid "VPN state unchanged"
+msgstr "État du VPN inchangé"
 
 msgid "Kill Switch not found"
 msgstr "Kill Switch introuvable"

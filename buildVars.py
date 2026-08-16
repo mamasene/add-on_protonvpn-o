@@ -22,6 +22,8 @@ This is a community add-on and is not affiliated with Proton AG.""",
     "addon_changelog": """Version 1.0.2:
 - Fixed the French translation, which was not being applied: the add-on speaks French again on French installations
 - The Kill Switch shortcut now identifies the Kill Switch before acting, and announces whether it ended up enabled or disabled. It can no longer change another setting by mistake
+- The right-hand widgets are now named after what they display instead of their position, and NVDA announces whether each one is enabled or disabled
+- The connection shortcut no longer risks activating an unrelated button, and it now reports when the VPN state did not actually change
 - IP addresses are no longer written to the NVDA log, which is often attached to bug reports
 - Buttons and switches are activated more reliably, and NVDA no longer risks freezing while ProtonVPN is connecting
 - Faster response when moving through the ProtonVPN window
