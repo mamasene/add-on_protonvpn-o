@@ -6,14 +6,23 @@ GNU .mo binary format reference:
   https://www.gnu.org/software/gettext/manual/html_node/MO-Files.html
 """
 
+import gettext
 import struct
 import os
-import sys
-import re
+
+
+# Minimal header used when a .po file carries no metadata entry of its own.
+# Without it, gettext falls back to ASCII and fails to decode accented translations.
+DEFAULT_HEADER = "Content-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+ESCAPES = {'n': '\n', 't': '\t', 'r': '\r', '"': '"', '\\': '\\'}
 
 
 def parse_po(po_path):
-    """Parse a .po file and return a dict of {msgid: msgstr}."""
+    """Parse a .po file and return a dict of {msgid: msgstr}.
+
+    The metadata entry (empty msgid) is kept: gettext reads the charset from it.
+    """
     messages = {}
     current_msgid = None
     current_msgstr = None
@@ -21,8 +30,21 @@ def parse_po(po_path):
     in_msgstr = False
 
     def unescape(s):
-        """Decode gettext escape sequences inside a quoted string value."""
-        return s.replace('\\n', '\n').replace('\\t', '\t').replace('\\"', '"').replace('\\\\', '\\')
+        """Decode gettext escape sequences inside a quoted string value.
+
+        Scanned left to right rather than by chained replaces: replacing "\\n"
+        before "\\\\" would turn a literal backslash followed by n into a newline.
+        """
+        out = []
+        i = 0
+        while i < len(s):
+            if s[i] == '\\' and i + 1 < len(s):
+                out.append(ESCAPES.get(s[i + 1], '\\' + s[i + 1]))
+                i += 2
+            else:
+                out.append(s[i])
+                i += 1
+        return ''.join(out)
 
     with open(po_path, encoding='utf-8') as f:
         for line in f:
@@ -31,8 +53,7 @@ def parse_po(po_path):
             if line.startswith('msgid "'):
                 # Save previous pair
                 if current_msgid is not None and current_msgstr is not None:
-                    if current_msgid:  # skip the header (empty msgid)
-                        messages[current_msgid] = current_msgstr
+                    messages[current_msgid] = current_msgstr
                 current_msgid = unescape(line[7:-1])
                 current_msgstr = None
                 in_msgid = True
@@ -55,8 +76,11 @@ def parse_po(po_path):
                 in_msgstr = False
 
     # Save the last pair
-    if current_msgid is not None and current_msgstr is not None and current_msgid:
+    if current_msgid is not None and current_msgstr is not None:
         messages[current_msgid] = current_msgstr
+
+    if not messages.get(''):
+        messages[''] = DEFAULT_HEADER
 
     return messages
 
@@ -116,6 +140,26 @@ def write_mo(messages, mo_path):
         f.write(mo)
 
 
+def verify_mo(mo_path, messages):
+    """Load the generated .mo through gettext to prove NVDA will be able to read it.
+
+    A catalog without a metadata entry loads as ASCII and blows up on the first
+    accented translation, so this check must run on every build.
+    """
+    with open(mo_path, 'rb') as f:
+        catalog = gettext.GNUTranslations(f)
+
+    for msgid, expected in messages.items():
+        if not msgid:
+            continue
+        actual = catalog.gettext(msgid)
+        if actual != expected:
+            raise ValueError(
+                f"{mo_path}: round-trip mismatch for {msgid!r}: "
+                f"got {actual!r}, expected {expected!r}"
+            )
+
+
 def compile_all(addon_dir):
     locale_dir = os.path.join(addon_dir, 'locale')
     if not os.path.isdir(locale_dir):
@@ -133,13 +177,15 @@ def compile_all(addon_dir):
 
         messages = parse_po(po_path)
         write_mo(messages, mo_path)
-        print(f"  [{lang}] {len(messages)} messages -> {mo_path}")
+        verify_mo(mo_path, messages)
+        # The metadata entry is not a translatable string, do not count it.
+        print(f"  [{lang}] {len(messages) - 1} messages -> {mo_path}")
         compiled += 1
 
     if compiled == 0:
         print("No .po files found.")
     else:
-        print(f"Done: {compiled} catalog(s) compiled.")
+        print(f"Done: {compiled} catalog(s) compiled and verified.")
 
 
 if __name__ == '__main__':

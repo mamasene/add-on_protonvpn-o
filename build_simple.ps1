@@ -1,45 +1,40 @@
-# Build script NVDA Add-on ProtonVPN (version corrigée encodage)
+# Build script NVDA Add-on ProtonVPN
 # Usage: .\build_simple.ps1
+#
+# buildVars.py is the single source of truth for version and metadata.
+# Nothing in this script hardcodes them.
 
 $ErrorActionPreference = "Stop"
 
-# Configuration
 $addonName = "protonVPNAccessibility"
-$addonVersion = "1.0.1"
-$outputFile = "$addonName-$addonVersion.nvda-addon"
 
 Write-Host "=== NVDA Add-on Build Script ===" -ForegroundColor Cyan
+
+# =========================
+# MANIFEST + VERSION
+# =========================
+Write-Host "Generating manifest from buildVars.py..."
+$addonVersion = (python tools\generate_manifest.py).Trim()
+if ($LASTEXITCODE -ne 0) { throw "Manifest generation failed." }
+if ([string]::IsNullOrWhiteSpace($addonVersion)) { throw "Could not read version from buildVars.py." }
+
+$outputFile = "$addonName-$addonVersion.nvda-addon"
 Write-Host "Building: $outputFile"
-
-# Encodage UTF-8 avec BOM
-$utf8BOM = New-Object System.Text.UTF8Encoding $true
-
-# =========================
-# MANIFEST (FIX PRINCIPAL)
-# =========================
-Write-Host "Copying manifest.ini (preserving encoding)..."
-
-if (-not (Test-Path "manifest.ini")) {
-    throw "manifest.ini introuvable à la racine du projet."
-}
-
-Copy-Item ".\manifest.ini" ".\addon\manifest.ini" -Force
 
 # =========================
 # DOSSIERS DOC
 # =========================
-if (-not (Test-Path "addon\doc\en")) {
-    New-Item -ItemType Directory -Path "addon\doc\en" -Force | Out-Null
+# addon/doc/en/readme.html and addon/doc/fr/readme.html are committed static
+# files and are never regenerated: the curated HTML is the deliverable.
+foreach ($lang in @("en", "fr")) {
+    $docDir = "addon\doc\$lang"
+    if (-not (Test-Path $docDir)) {
+        New-Item -ItemType Directory -Path $docDir -Force | Out-Null
+    }
+    if (-not (Test-Path "$docDir\readme.html")) {
+        throw "Missing documentation file: $docDir\readme.html"
+    }
 }
-if (-not (Test-Path "addon\doc\fr")) {
-    New-Item -ItemType Directory -Path "addon\doc\fr" -Force | Out-Null
-}
-
-# =========================
-# DOC HTML (static — do not regenerate)
-# =========================
-# addon/doc/en/readme.html and addon/doc/fr/readme.html are committed static files.
-# EN: English documentation.  FR: French translation (do not overwrite).
 Write-Host "Using committed static HTML documentation (en + fr)."
 
 # =========================
@@ -47,21 +42,22 @@ Write-Host "Using committed static HTML documentation (en + fr)."
 # =========================
 Write-Host "Compiling locale catalogs..."
 python tools\compile_po.py
+if ($LASTEXITCODE -ne 0) { throw "Locale compilation failed." }
 
-# =========================
-# CLEAN ANCIEN BUILD
-# =========================
-if (Test-Path $outputFile) {
-    Remove-Item $outputFile -Force
-}
+# Translated store metadata (summary, description, changelog) per language.
+Write-Host "Generating translated manifests..."
+python tools\generate_translated_manifests.py
+if ($LASTEXITCODE -ne 0) { throw "Translated manifest generation failed." }
 
 # =========================
 # PACKAGE
 # =========================
+# Exclusions and file layout live in tools/package.py, shared with sconstruct,
+# so both build entry points produce the same package.
 Write-Host "Creating package..."
-
-Compress-Archive -Path "addon\*" -DestinationPath "$addonName-$addonVersion.zip" -Force
-Rename-Item "$addonName-$addonVersion.zip" $outputFile -Force
+python tools\package.py | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "Packaging failed." }
+if (-not (Test-Path $outputFile)) { throw "Expected package not found: $outputFile" }
 
 # =========================
 # FIN
@@ -70,10 +66,10 @@ Write-Host ""
 Write-Host "=== Build Complete ===" -ForegroundColor Green
 Write-Host "Output: $outputFile"
 Write-Host ""
-Write-Host "Installation NVDA:"
+Write-Host "Installation NVDA :"
 Write-Host "1. Ouvrir le menu NVDA"
-Write-Host "2. Aller dans Outils → Add-on Store"
-Write-Host "3. Accéder à l'onglet Extensions disponibles"
+Write-Host "2. Aller dans Outils -> Add-on Store"
+Write-Host "3. Acceder a l'onglet Extensions disponibles"
 Write-Host "4. Rechercher : ProtonVPN Accessibility"
-Write-Host "5. Sélectionner l'extension puis choisir Installer"
-Write-Host "6. Redémarrer NVDA"
+Write-Host "5. Selectionner l'extension puis choisir Installer"
+Write-Host "6. Redemarrer NVDA"

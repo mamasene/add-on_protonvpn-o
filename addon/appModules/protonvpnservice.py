@@ -1,7 +1,8 @@
 """
 Add-on NVDA - Module d'application ProtonVPN
 Fichier: protonvpnservice.py
-Version: 1.0.0
+
+La version fait foi dans buildVars.py uniquement : ne pas la recopier ici.
 
 Améliore l'accessibilité de ProtonVPN avec :
 - Extraction des valeurs dynamiques via UIA (IP, Pays, Fournisseur)
@@ -20,9 +21,7 @@ RACCOURCIS (dans ProtonVPN uniquement):
 # LOG IMMEDIAT AU CHARGEMENT
 # ============================================================================
 from logHandler import log
-log.info("=" * 60)
-log.info("PROTONVPN: protonvpnservice.py v1.0.0 loading...")
-log.info("=" * 60)
+log.info("PROTONVPN: protonvpnservice.py loading...")
 
 # ============================================================================
 # IMPORTS
@@ -56,6 +55,43 @@ LOCATION_DETAILS_Y_MAX = 1300
 
 # Regex pour détecter une adresse IP
 IP_REGEX = re.compile(r'\b\d{1,3}(?:\.\d{1,3}){3}\b')
+
+# Libellés permettant d'identifier le widget Kill Switch, quelle que soit sa
+# position dans la colonne (l'ordre varie selon l'offre et la version de l'app).
+KILL_SWITCH_KEYWORDS = ("kill switch", "killswitch", "arrêt d'urgence")
+
+# Textes d'état affichés par les widgets, comparés en égalité stricte :
+# une recherche par sous-chaîne ferait correspondre "on" à n'importe quel mot.
+WIDGET_STATE_ON = frozenset((
+    "on", "actif", "active", "activé", "activée", "enabled", "activated",
+))
+WIDGET_STATE_OFF = frozenset((
+    "off", "inactif", "inactive", "désactivé", "désactivée", "disabled", "deactivated",
+))
+
+
+def get_addon_version():
+    """Retourne la version déclarée dans le manifeste de l'add-on.
+
+    Le manifeste est généré depuis buildVars.py : c'est la seule source de vérité.
+    """
+    try:
+        return addonHandler.getCodeAddon().manifest["version"]
+    except Exception:
+        # addonHandler peut être absent (import échoué) ou le module chargé
+        # hors d'un add-on installé.
+        return "unknown"
+
+
+def redact(text):
+    """Masque les adresses IP avant journalisation.
+
+    Le journal NVDA est fréquemment joint tel quel aux rapports de bug publics :
+    il ne doit jamais contenir l'IP réelle ni l'IP du tunnel.
+    """
+    if not text:
+        return text
+    return IP_REGEX.sub("[ip]", str(text))
 
 
 # ============================================================================
@@ -376,8 +412,8 @@ def extract_dynamic_value(obj, index):
     value = extract_value_for_label_type(all_texts, label_type)
     
     if DEBUG_MODE:
-        log.info(f"PROTONVPN: DynamicValue extraction - index={index}, labelType={label_type}, "
-                 f"source={source}, texts={all_texts[:5]}, value={value}")
+        log.debug(f"PROTONVPN: DynamicValue extraction - index={index}, labelType={label_type}, "
+                  f"source={source}, texts={redact(all_texts[:5])}, value={redact(value)}")
     
     return value
 
@@ -619,7 +655,7 @@ def extract_connection_details_label_and_values(obj):
                 break
     
     if DEBUG_MODE:
-        log.info(f"PROTONVPN: ConnectionDetails extraction - label='{label}', values={values}")
+        log.debug(f"PROTONVPN: ConnectionDetails extraction - label='{label}', values={redact(values)}")
     
     return label, values
 
@@ -627,6 +663,39 @@ def extract_connection_details_label_and_values(obj):
 # ============================================================================
 # WIDGETS COLONNE DROITE
 # ============================================================================
+
+def widget_matches_keywords(obj, keywords):
+    """Vérifie qu'un widget porte bien l'un des libellés attendus.
+
+    Sert à identifier un widget par ce qu'il affiche plutôt que par son rang :
+    basculer un réglage de sécurité sur une simple supposition de position
+    reviendrait à modifier NetShield ou Split tunneling à l'insu de l'utilisateur.
+    """
+    try:
+        haystack = (obj.name or "") + " " + get_all_text_descendants_as_string(obj, 4)
+        haystack = haystack.lower()
+        return any(kw in haystack for kw in keywords)
+    except Exception as e:
+        log.debugWarning(f"PROTONVPN: widget_matches_keywords error: {e}")
+        return False
+
+
+def get_widget_state(obj):
+    """Lit l'état on/off affiché par un widget.
+
+    Retourne True (activé), False (désactivé), ou None si l'état n'est pas lisible.
+    """
+    try:
+        for text, _rect in get_text_descendants(obj, max_depth=4):
+            normalized = text.strip().lower().rstrip('.')
+            if normalized in WIDGET_STATE_ON:
+                return True
+            if normalized in WIDGET_STATE_OFF:
+                return False
+    except Exception as e:
+        log.debugWarning(f"PROTONVPN: get_widget_state error: {e}")
+    return None
+
 
 def count_same_type_siblings_before(obj):
     """Compte les frères de même type avant cet objet."""
@@ -653,8 +722,7 @@ def count_same_type_siblings_before(obj):
 class ProtonVPNConnectButton(UIA):
     """Overlay pour le bouton principal Connecter/Déconnecter."""
 
-    @property
-    def name(self):
+    def _get_name(self):
         original_name = super().name or ""
         automationId = get_automation_id(self)
 
@@ -671,8 +739,7 @@ class ProtonVPNConnectButton(UIA):
 class ProtonVPNLocationDetailsButton(UIA):
     """Overlay pour les 3 boutons dynamiques de LocationDetailsPage."""
 
-    @property
-    def name(self):
+    def _get_name(self):
         index = get_location_button_index(self)
         label = get_location_button_label(index)
         value = extract_dynamic_value(self, index)
@@ -683,7 +750,7 @@ class ProtonVPNLocationDetailsButton(UIA):
             result = label
         
         if DEBUG_MODE:
-            log.info(f"PROTONVPN: LocationDetailsButton.name → \"{result}\" (index={index})")
+            log.debug(f"PROTONVPN: LocationDetailsButton.name → \"{redact(result)}\" (index={index})")
         
         return result
 
@@ -695,8 +762,7 @@ class ProtonVPNConnectionDetailsButton(UIA):
     Annonce: "Label : Valeur(s)" (ex: "Adresse IP du VPN : 37.19.199.137")
     """
 
-    @property
-    def name(self):
+    def _get_name(self):
         automationId = get_automation_id(self)
         label, values = extract_connection_details_label_and_values(self)
         
@@ -707,7 +773,7 @@ class ProtonVPNConnectionDetailsButton(UIA):
             result = label
         
         if DEBUG_MODE:
-            log.info(f"PROTONVPN: ConnectionDetailsButton.name → \"{result}\" (ID={automationId})")
+            log.debug(f"PROTONVPN: ConnectionDetailsButton.name → \"{redact(result)}\" (ID={automationId})")
         
         return result
 
@@ -719,8 +785,7 @@ class ProtonVPNOverlayPromoButton(UIA):
     Construit dynamiquement un label à partir des descendants Text.
     """
 
-    @property
-    def name(self):
+    def _get_name(self):
         promo_text = extract_overlay_promo_text(self)
         
         if DEBUG_MODE:
@@ -736,22 +801,14 @@ class ProtonVPNPlusPromoButton(UIA):
     - name = "Passer à VPN Plus" (court, pour le focus)
     - description = texte marketing long (accessible via NVDA+Tab ou Ctrl+Shift+L)
     """
-    
-    _cached_long_text = None
 
-    @property
-    def name(self):
+    def _get_name(self):
         return _("Upgrade to VPN Plus")
-    
-    @property
-    def description(self):
+
+    def _get_description(self):
         """Retourne le texte marketing long pour NVDA+Tab."""
-        if self._cached_long_text:
-            return self._cached_long_text
-        
         long_text = extract_vpn_plus_long_text(self)
-        self._cached_long_text = long_text
-        
+
         if DEBUG_MODE:
             log.info(f"PROTONVPN: VPNPlusPromoButton.description → \"{long_text[:80]}...\"")
         
@@ -761,10 +818,9 @@ class ProtonVPNPlusPromoButton(UIA):
 class ProtonVPNWidgetButton(UIA):
     """Overlay pour les widgets colonne droite."""
 
-    @property
-    def name(self):
+    def _get_name(self):
         original_name = super().name or ""
-        
+
         if original_name and len(original_name.strip()) > 2:
             if original_name not in (_("ProtonVPN widget button"), _("ProtonVPN button"), _("Unnamed button")):
                 return original_name
@@ -805,8 +861,7 @@ class ProtonVPNSideWidgetButton(UIA):
         "TitleBarMenuButton": _("Main menu"),
     }
 
-    @property
-    def name(self):
+    def _get_name(self):
         original_name = super().name or ""
         automationId = get_automation_id(self)
 
@@ -826,8 +881,7 @@ class ProtonVPNSideWidgetButton(UIA):
 class ProtonVPNGenericButton(UIA):
     """Overlay générique pour les boutons sans nom (fallback)."""
 
-    @property
-    def name(self):
+    def _get_name(self):
         original_name = super().name or ""
         automationId = get_automation_id(self)
 
@@ -851,10 +905,7 @@ class AppModule(appModuleHandler.AppModule):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        log.info("=" * 60)
-        log.info("PROTONVPN: AppModule v1.0.0 loaded!")
-        log.info(f"PROTONVPN: DEBUG_MODE = {DEBUG_MODE}")
-        log.info("=" * 60)
+        log.info(f"PROTONVPN: AppModule v{get_addon_version()} loaded (DEBUG_MODE={DEBUG_MODE})")
         if DEBUG_MODE:
             ui.message(_("ProtonVPN add-on active"))
 
@@ -951,44 +1002,75 @@ class AppModule(appModuleHandler.AppModule):
             log.error(f"PROTONVPN: _find_element_by_automation_id error: {e}")
             return None
     
-    def _invoke_element(self, obj):
-        """Invoque un élément (clic/appui Entrée)."""
+    def _invoke_via_pattern(self, obj, pattern_id_name, interface_name, method_name):
+        """Déclenche un élément via un pattern UIA. Retourne True en cas de succès."""
         try:
-            if hasattr(obj, 'UIAElement') and obj.UIAElement:
-                # Essayer InvokePattern
-                try:
-                    import UIAHandler
-                    pattern = obj.UIAElement.GetCurrentPattern(UIAHandler.UIA_InvokePatternId)
-                    if pattern:
-                        pattern.QueryInterface(UIAHandler.IUIAutomationInvokePattern).Invoke()
-                        return True
-                except:
-                    pass
-            
-            # Fallback: doAction
-            try:
-                obj.doAction()
-                return True
-            except:
-                pass
-            
-            # Fallback: focus + Enter
-            try:
-                obj.setFocus()
-                import time
-                time.sleep(0.1)
-                import winUser
-                winUser.sendMessage(obj.windowHandle, 0x0100, 0x0D, 0)  # WM_KEYDOWN VK_RETURN
-                winUser.sendMessage(obj.windowHandle, 0x0101, 0x0D, 0)  # WM_KEYUP VK_RETURN
-                return True
-            except:
-                pass
-            
-            return False
+            element = getattr(obj, 'UIAElement', None)
+            if not element:
+                return False
+
+            import UIAHandler
+            pattern_id = getattr(UIAHandler, pattern_id_name, None)
+            interface = getattr(UIAHandler, interface_name, None)
+            if pattern_id is None or interface is None:
+                return False
+
+            pattern = element.GetCurrentPattern(pattern_id)
+            if not pattern:
+                return False
+
+            getattr(pattern.QueryInterface(interface), method_name)()
+            return True
         except Exception as e:
-            log.error(f"PROTONVPN: _invoke_element error: {e}")
+            log.debugWarning(f"PROTONVPN: {method_name} pattern unavailable: {e}")
             return False
-    
+
+    def _invoke_via_keyboard(self, obj):
+        """Dernier recours : donner le focus à l'élément puis envoyer Entrée.
+
+        Utilise KeyboardInputGesture (SendInput) et non winUser.sendMessage :
+        SendMessage est synchrone et inter-processus, il bloquerait le thread
+        principal de NVDA tant que ProtonVPN ne traite pas le message — ce qui
+        arrive précisément pendant l'établissement d'une connexion. Les fenêtres
+        XAML ignorent de toute façon les WM_KEYDOWN synthétiques.
+        """
+        try:
+            obj.setFocus()
+        except Exception as e:
+            log.debugWarning(f"PROTONVPN: setFocus failed: {e}")
+            return False
+
+        try:
+            from keyboardHandler import KeyboardInputGesture
+            KeyboardInputGesture.fromName("enter").send()
+            return True
+        except Exception as e:
+            log.error(f"PROTONVPN: keyboard fallback failed: {e}")
+            return False
+
+    def _invoke_element(self, obj):
+        """Déclenche un élément, du moyen le plus fiable au moins fiable."""
+        if self._invoke_via_pattern(
+            obj, "UIA_InvokePatternId", "IUIAutomationInvokePattern", "Invoke"
+        ):
+            return True
+
+        # Les widgets de la colonne droite exposent souvent TogglePattern
+        # plutôt qu'InvokePattern.
+        if self._invoke_via_pattern(
+            obj, "UIA_TogglePatternId", "IUIAutomationTogglePattern", "Toggle"
+        ):
+            return True
+
+        try:
+            obj.doAction()
+            return True
+        except Exception as e:
+            log.debugWarning(f"PROTONVPN: doAction failed: {e}")
+
+        return self._invoke_via_keyboard(obj)
+
+
     def script_toggleVPN(self, gesture):
         """Connecter ou déconnecter le VPN."""
         log.info("PROTONVPN: script_toggleVPN triggered!")
@@ -1077,47 +1159,101 @@ class AppModule(appModuleHandler.AppModule):
     script_toggleVPN.__doc__ = _("Toggle VPN connection")
     script_toggleVPN.category = "ProtonVPN"
     
+    def _iter_widget_buttons(self, max_depth=15):
+        """Énumère les WidgetButton de la fenêtre au premier plan."""
+        widgets = []
+        fg = api.getForegroundObject()
+        if not fg:
+            return widgets
+
+        def search(obj, depth=0):
+            if depth > max_depth:
+                return
+            try:
+                if get_automation_id(obj) == "WidgetButton":
+                    widgets.append(obj)
+                for child in obj.children:
+                    search(child, depth + 1)
+            except Exception:
+                pass
+
+        search(fg)
+        return widgets
+
+    def _find_widget_by_keywords(self, keywords):
+        """Retourne le widget portant l'un des libellés donnés, ou None.
+
+        L'identification repose sur le texte affiché, pas sur le rang du widget.
+        """
+        for widget in self._iter_widget_buttons():
+            if widget_matches_keywords(widget, keywords):
+                return widget
+        return None
+
+    def _log_available_widgets(self):
+        """Journalise les libellés des widgets trouvés, pour diagnostic."""
+        try:
+            labels = [
+                redact(get_all_text_descendants_as_string(w, 4))
+                for w in self._iter_widget_buttons()
+            ]
+            log.debug(f"PROTONVPN: no matching widget. Available widgets: {labels}")
+        except Exception as e:
+            log.debugWarning(f"PROTONVPN: _log_available_widgets error: {e}")
+
+    def _announce_widget_state(self, keywords, label):
+        """Relit et annonce l'état d'un widget après basculement."""
+        try:
+            widget = self._find_widget_by_keywords(keywords)
+            state = get_widget_state(widget) if widget else None
+
+            if state is None:
+                # État illisible : annoncer le widget sans affirmer un résultat
+                # qui n'a pas été vérifié.
+                ui.message(label)
+            elif state:
+                ui.message(_("{feature} enabled").format(feature=label))
+            else:
+                ui.message(_("{feature} disabled").format(feature=label))
+        except Exception as e:
+            log.error(f"PROTONVPN: _announce_widget_state error: {e}")
+            ui.message(label)
+
     def script_toggleKillSwitch(self, gesture):
         """Activer ou désactiver le Kill Switch."""
-        log.info("PROTONVPN: script_toggleKillSwitch triggered!")
-        
-        # Le Kill Switch est accessible via WidgetButton (index 1 dans les widgets)
-        # On cherche via les éléments avec AutomationId == "WidgetButton"
+        log.debug("PROTONVPN: script_toggleKillSwitch triggered")
+
         try:
-            fg = api.getForegroundObject()
-            if not fg:
+            widget = self._find_widget_by_keywords(KILL_SWITCH_KEYWORDS)
+
+            if not widget:
+                # Refuser d'agir plutôt que de basculer un widget non identifié :
+                # le Kill Switch protège contre les fuites d'IP, et le widget
+                # voisin pourrait être NetShield ou Split tunneling.
+                self._log_available_widgets()
+                ui.message(_("Kill Switch not found"))
+                return
+
+            if not self._invoke_element(widget):
                 ui.message(_("Action unavailable"))
                 return
-            
-            # Chercher tous les WidgetButton
-            widgets = []
-            def find_widgets(obj, depth=0):
-                if depth > 15:
-                    return
-                try:
-                    if get_automation_id(obj) == "WidgetButton":
-                        widgets.append(obj)
-                    for child in obj.children:
-                        find_widgets(child, depth + 1)
-                except:
-                    pass
-            
-            find_widgets(fg)
-            
-            # Le Kill Switch est généralement le 2ème widget (index 1)
-            if len(widgets) >= 2:
-                kill_switch_btn = widgets[1]
+
+            # L'état résultant est relu dans l'interface : ne jamais annoncer
+            # un basculement qui n'a pas été constaté.
+            try:
+                import wx
+                wx.CallLater(
+                    800,
+                    self._announce_widget_state,
+                    KILL_SWITCH_KEYWORDS,
+                    _("Kill Switch"),
+                )
+            except Exception:
                 ui.message(_("Kill Switch"))
-                if self._invoke_element(kill_switch_btn):
-                    log.info("PROTONVPN: Kill Switch toggled")
-                else:
-                    ui.message(_("Action unavailable"))
-            else:
-                ui.message(_("Kill Switch not found"))
         except Exception as e:
             log.error(f"PROTONVPN: script_toggleKillSwitch error: {e}")
             ui.message(_("Action unavailable"))
-    
+
     script_toggleKillSwitch.__doc__ = _("Toggle Kill Switch")
     script_toggleKillSwitch.category = "ProtonVPN"
     
@@ -1200,7 +1336,7 @@ class AppModule(appModuleHandler.AppModule):
             if traffic_info:
                 message = ". ".join(traffic_info)
                 ui.message(message)
-                log.info(f"PROTONVPN: Traffic announced: {message}")
+                log.debug(f"PROTONVPN: Traffic announced: {redact(message)}")
             else:
                 ui.message(_("Traffic information unavailable. VPN not connected?"))
         except Exception as e:

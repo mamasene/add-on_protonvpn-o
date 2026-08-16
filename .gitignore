@@ -19,6 +19,7 @@ desktop.ini
 
 # Generated files
 addon/manifest.ini
+addon/locale/*/manifest.ini
 
 # Temporary files
 *.tmp

@@ -18,8 +18,17 @@ Main features:
 - French and English documentation
 
 This is a community add-on and is not affiliated with Proton AG.""",
-    "addon_version": "1.0.1",
-    "addon_changelog": """Version 1.0.1:
+    "addon_version": "1.0.2",
+    "addon_changelog": """Version 1.0.2:
+- Fixed the French translation, which was not being applied: the add-on speaks French again on French installations
+- The Kill Switch shortcut now identifies the Kill Switch before acting, and announces whether it ended up enabled or disabled. It can no longer change another setting by mistake
+- IP addresses are no longer written to the NVDA log, which is often attached to bug reports
+- Buttons and switches are activated more reliably, and NVDA no longer risks freezing while ProtonVPN is connecting
+- Faster response when moving through the ProtonVPN window
+- The license file is now included in the package, and the version history is shown in the Add-on Store
+- Add-on summary, description and version history are now available in French
+
+Version 1.0.1:
 - Updated add-on display name for international users
 - Fixed project repository URL
 - Improved manifest metadata
@@ -51,11 +60,13 @@ pythonSources = [
 # Fichiers à traduire
 i18nSources = pythonSources + ["buildVars.py"]
 
-# Fichiers à exclure du package
+# Fichiers à exclure du package (motifs appliqués à chaque composant du chemin).
+# Seule déclaration : tools/package.py les lit, aucun script de build ne les recopie.
 excludedFiles = [
     "*.pyc",
     "__pycache__",
     "*.pyo",
+    "*.po",  # seul le .mo compilé est utile à l'exécution
 ]
 
 # Langue de base (pour la documentation)
