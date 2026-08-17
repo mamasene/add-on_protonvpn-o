@@ -65,22 +65,21 @@ Changes
 Version 1.1.0
 
 New features
-- Search for a country with Control+Shift+L: the add-on takes you straight to the ProtonVPN search field, so you can reach any country by typing a few letters
-- The country list is now readable: each country is announced by its name instead of an internal code
-- NetShield, Kill Switch, Split tunneling and Port forwarding are announced by name, together with whether each one is on or off
+- Search for a country with Control+Shift+L: the add-on takes you straight to the ProtonVPN search field. Type a few letters to reach any country.
+- The country list is now readable: each country is announced by its name.
+- The country list tabs (All countries, Secure Core, P2P, Tor) are announced by their name.
+- NetShield, Kill Switch, Split tunneling and Port forwarding are announced by name, together with whether each one is on or off.
 
 Fixes
-- The add-on now speaks French. The translation was not being applied at all
-- The Kill Switch, traffic and country shortcuts work again, including while the VPN is connected
-- The country shortcut now works while connected, by opening the server change panel
-- The connection status is announced only once the change has actually happened, and the add-on now tells you when nothing changed
+- The add-on now speaks French.
+- The Kill Switch, traffic and country shortcuts work again, including while the VPN is connected.
+- Connection and disconnection are announced only once they have actually happened, and the add-on tells you if nothing changed.
 
 Improvements
-- Keyboard shortcuts respond much faster
-- NVDA no longer risks freezing while ProtonVPN is establishing a connection
-- IP addresses are no longer written to the NVDA log, which is often attached to bug reports
-- Add-on summary, description and version history are now available in French
-- The license file now ships with the add-on
+- Keyboard shortcuts respond much faster.
+- NVDA no longer freezes while ProtonVPN is establishing a connection.
+- Your IP address is no longer recorded in the NVDA log.
+- The add-on summary, description and version history are available in French.
 
 Version 1.0.1
 - Updated add-on display name for international users

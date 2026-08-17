@@ -99,6 +99,21 @@ COUNTRY_LIST_ANCHOR_ID = "Connect_to_Fastest"
 # fiable, notre propre liste ne voyant que les pays déjà affichés.
 SEARCH_BOX_AUTOMATION_ID = "SearchTextBox"
 
+# Certains éléments — les onglets de la liste des pays notamment — sont nommés
+# par ProtonVPN avec le nom complet de leur classe interne, du type
+# « ProtonVPN.Client.UI.Main.…​.P2PCountriesComponentViewModel ». Illisible à
+# l'oral : on en extrait un libellé.
+QUALIFIED_NAME_PREFIX = "ProtonVPN."
+
+CLASS_NAME_SUFFIXES = ("ComponentViewModel", "ViewModel", "Component")
+
+INTERNAL_NAME_LABELS = {
+    "AllCountries": _("All countries"),
+    "SecureCoreCountries": _("Secure Core"),
+    "P2PCountries": _("P2P"),
+    "TorCountries": _("Tor"),
+}
+
 # Garde-fou sur la photographie de la fenêtre : la liste des serveurs peut
 # compter des milliers d'éléments, inutile de tous les rapatrier.
 MAX_SNAPSHOT_ELEMENTS = 4000
@@ -309,6 +324,32 @@ def find_by_tree_walk(automation_ids, max_depth=15):
 
     search(fg)
     return found
+
+
+def looks_like_qualified_class_name(text):
+    """Vrai si le texte est un nom de classe interne plutôt qu'un libellé."""
+    if not text or " " in text:
+        return False
+    return text.startswith(QUALIFIED_NAME_PREFIX) and "." in text
+
+
+def humanize_class_name(text):
+    """Transforme un nom de classe interne en libellé lisible."""
+    segment = text.rsplit(".", 1)[-1]
+
+    for suffix in CLASS_NAME_SUFFIXES:
+        if segment.endswith(suffix):
+            segment = segment[: -len(suffix)]
+            break
+
+    label = INTERNAL_NAME_LABELS.get(segment)
+    if label:
+        return label
+
+    # Repli pour un nom non répertorié : « SecureCoreCountries » devient
+    # « Secure Core Countries », toujours préférable au nom complet.
+    spaced = re.sub(r'(?<=[a-z0-9])(?=[A-Z])', ' ', segment).strip()
+    return spaced or text
 
 
 def normalize_for_search(text):
@@ -1382,6 +1423,22 @@ class ProtonVPNSideWidgetButton(UIA):
         return _("ProtonVPN button")
 
 
+class ProtonVPNInternalNameObject(UIA):
+    """Overlay pour les éléments nommés par leur classe interne.
+
+    Concerne notamment les onglets de la liste des pays, que ProtonVPN nomme
+    « ProtonVPN.Client.UI.Main.…​.AllCountriesComponentViewModel ».
+    """
+
+    def _get_name(self):
+        original_name = super().name or ""
+
+        if looks_like_qualified_class_name(original_name):
+            return humanize_class_name(original_name)
+
+        return original_name
+
+
 class ProtonVPNGenericButton(UIA):
     """Overlay générique pour les boutons sans nom (fallback)."""
 
@@ -1506,8 +1563,13 @@ class AppModule(appModuleHandler.AppModule):
             automationId = get_automation_id(obj)
             frameworkId = get_framework_id(obj)
             
-            if role == controlTypes.Role.BUTTON and frameworkId == "XAML":
-                
+            # 0) Nom de classe interne, quel que soit le rôle : les onglets de
+            # la liste des pays sont concernés, pas seulement les boutons.
+            if frameworkId == "XAML" and looks_like_qualified_class_name(name):
+                clsList.insert(0, ProtonVPNInternalNameObject)
+
+            elif role == controlTypes.Role.BUTTON and frameworkId == "XAML":
+
                 # 1) Bouton principal de connexion
                 if automationId == "ConnectionCardConnectButton":
                     clsList.insert(0, ProtonVPNConnectButton)
