@@ -13,8 +13,10 @@ Compatibilité NVDA : 2025.1 et ultérieur</p>
 <p>Cette extension améliore l'accessibilité de l'application ProtonVPN pour Windows avec NVDA.</p>
 <p>Elle fournit :</p>
 <ul>
-<li>Un étiquetage correct des éléments de l'interface</li>
+<li>Un étiquetage correct des éléments de l'interface, y compris la liste des pays</li>
 <li>Des informations vocales sur l'état du VPN (adresse IP, pays, fournisseur, trafic)</li>
+<li>L'état activé ou désactivé de NetShield, de l'Arrêt d'urgence, du Split tunneling et de la Redirection de port</li>
+<li>Un accès direct au champ de recherche de pays</li>
 <li>Des raccourcis clavier pour les actions VPN courantes</li>
 </ul>
 
@@ -33,7 +35,11 @@ Compatibilité NVDA : 2025.1 et ultérieur</p>
 <li>Contrôle+Maj+K : Activer / Désactiver le Kill Switch</li>
 <li>Contrôle+Maj+C : Ouvrir le sélecteur de pays</li>
 <li>Contrôle+Maj+T : Annoncer les informations de trafic</li>
+<li>Contrôle+Maj+L : Rechercher un pays</li>
+<li>Contrôle+Maj+F9 : Écrire un diagnostic dans le journal de NVDA</li>
 </ul>
+<p>Tous les raccourcis sont modifiables depuis la boîte de dialogue Gestes de
+commandes de NVDA, dans la catégorie ProtonVPN.</p>
 
 <h2>Remarques</h2>
 <p>Les messages vocaux (adresse IP, pays, fournisseur, trafic) sont dynamiques.
@@ -42,17 +48,27 @@ Ils dépendent de l'état actuel de la connexion VPN et des données disponibles
 <p>Il s'agit d'une extension communautaire non affiliée à Proton AG.</p>
 
 <h2>Historique des versions</h2>
-<h3>Version 1.0.2</h3>
+<h3>Version 1.1.0</h3>
+<h4>Nouveautés</h4>
 <ul>
-<li>Correction de la traduction française, qui ne s'appliquait pas : l'extension parle de nouveau français sur les installations francophones</li>
-<li>Le raccourci du Kill Switch identifie désormais le Kill Switch avant d'agir, et annonce s'il est activé ou désactivé. Il ne peut plus modifier un autre réglage par erreur</li>
-<li>Les widgets de la colonne droite sont désormais nommés d'après ce qu'ils affichent et non d'après leur position, et NVDA annonce s'ils sont activés ou désactivés</li>
-<li>Le raccourci de connexion ne risque plus d'activer un bouton sans rapport, et signale désormais lorsque l'état du VPN n'a pas changé</li>
+<li>Recherche d'un pays par Contrôle+Maj+L : l'extension vous place directement dans le champ de recherche de ProtonVPN, il suffit de taper quelques lettres pour atteindre n'importe quel pays</li>
+<li>La liste des pays est enfin lisible : chaque pays est annoncé par son nom et non par un code interne</li>
+<li>NetShield, Arrêt d'urgence, Split tunneling et Redirection de port sont annoncés par leur nom, avec leur état activé ou désactivé</li>
+</ul>
+<h4>Corrections</h4>
+<ul>
+<li>L'extension parle désormais français. La traduction n'était pas appliquée du tout</li>
+<li>Les raccourcis Arrêt d'urgence, trafic et pays fonctionnent à nouveau, y compris VPN connecté</li>
+<li>Le raccourci pays fonctionne maintenant lorsque le VPN est connecté, en ouvrant le panneau de changement de serveur</li>
+<li>L'état de la connexion n'est annoncé qu'une fois le changement réellement constaté, et l'extension signale désormais lorsque rien n'a changé</li>
+</ul>
+<h4>Améliorations</h4>
+<ul>
+<li>Les raccourcis clavier répondent beaucoup plus vite</li>
+<li>NVDA ne risque plus de se figer pendant que ProtonVPN établit la connexion</li>
 <li>Les adresses IP ne sont plus écrites dans le journal de NVDA, souvent joint aux rapports de bug</li>
-<li>Activation plus fiable des boutons et des interrupteurs ; NVDA ne risque plus de se figer pendant que ProtonVPN établit la connexion</li>
-<li>Meilleure réactivité lors du parcours de la fenêtre ProtonVPN</li>
-<li>Le fichier de licence est désormais inclus dans le paquet, et l'historique des versions apparaît dans l'Add-on Store</li>
-<li>Le résumé, la description et l'historique des versions de l'extension sont désormais disponibles en français</li>
+<li>Le résumé, la description et l'historique des versions sont disponibles en français</li>
+<li>Le fichier de licence accompagne désormais l'extension</li>
 </ul>
 
 <h3>Version 1.0.1</h3>

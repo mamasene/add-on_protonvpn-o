@@ -13,8 +13,10 @@ NVDA compatibility: 2025.1 and later</p>
 <p>This add-on improves the accessibility of the ProtonVPN Windows application for NVDA users.</p>
 <p>It provides:</p>
 <ul>
-<li>Proper labeling of interface elements</li>
+<li>Proper labeling of interface elements, including the country list</li>
 <li>Spoken information about VPN status (IP address, country, provider, traffic)</li>
+<li>On/off state for NetShield, Kill Switch, Split tunneling and Port forwarding</li>
+<li>Quick access to the country search field</li>
 <li>Keyboard shortcuts for common VPN actions</li>
 </ul>
 
@@ -33,7 +35,11 @@ NVDA compatibility: 2025.1 and later</p>
 <li>Control+Shift+K: Toggle Kill Switch</li>
 <li>Control+Shift+C: Open country selector</li>
 <li>Control+Shift+T: Announce traffic information</li>
+<li>Control+Shift+L: Search for a country</li>
+<li>Control+Shift+F9: Write diagnostics to the NVDA log</li>
 </ul>
+<p>All shortcuts can be reassigned from NVDA's Input Gestures dialog, under the
+ProtonVPN category.</p>
 
 <h2>Notes</h2>
 <p>The spoken messages (IP address, country, provider, traffic) are dynamic.
@@ -42,17 +48,27 @@ They depend on the current VPN connection state and available data.</p>
 <p>This is a community add-on and is not affiliated with Proton AG.</p>
 
 <h2>Changes</h2>
-<h3>Version 1.0.2</h3>
+<h3>Version 1.1.0</h3>
+<h4>New features</h4>
 <ul>
-<li>Fixed the French translation, which was not being applied: the add-on speaks French again on French installations</li>
-<li>The Kill Switch shortcut now identifies the Kill Switch before acting, and announces whether it ended up enabled or disabled. It can no longer change another setting by mistake</li>
-<li>The right-hand widgets are now named after what they display instead of their position, and NVDA announces whether each one is enabled or disabled</li>
-<li>The connection shortcut no longer risks activating an unrelated button, and it now reports when the VPN state did not actually change</li>
+<li>Search for a country with Control+Shift+L: the add-on takes you straight to the ProtonVPN search field, so you can reach any country by typing a few letters</li>
+<li>The country list is now readable: each country is announced by its name instead of an internal code</li>
+<li>NetShield, Kill Switch, Split tunneling and Port forwarding are announced by name, together with whether each one is on or off</li>
+</ul>
+<h4>Fixes</h4>
+<ul>
+<li>The add-on now speaks French. The translation was not being applied at all</li>
+<li>The Kill Switch, traffic and country shortcuts work again, including while the VPN is connected</li>
+<li>The country shortcut now works while connected, by opening the server change panel</li>
+<li>The connection status is announced only once the change has actually happened, and the add-on now tells you when nothing changed</li>
+</ul>
+<h4>Improvements</h4>
+<ul>
+<li>Keyboard shortcuts respond much faster</li>
+<li>NVDA no longer risks freezing while ProtonVPN is establishing a connection</li>
 <li>IP addresses are no longer written to the NVDA log, which is often attached to bug reports</li>
-<li>Buttons and switches are activated more reliably, and NVDA no longer risks freezing while ProtonVPN is connecting</li>
-<li>Faster response when moving through the ProtonVPN window</li>
-<li>The license file is now included in the package, and the version history is shown in the Add-on Store</li>
 <li>Add-on summary, description and version history are now available in French</li>
+<li>The license file now ships with the add-on</li>
 </ul>
 
 <h3>Version 1.0.1</h3>

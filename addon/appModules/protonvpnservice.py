@@ -15,6 +15,8 @@ RACCOURCIS (dans ProtonVPN uniquement):
 - Ctrl+Shift+K : Activer / Désactiver le Kill Switch
 - Ctrl+Shift+C : Ouvrir le sélecteur de pays
 - Ctrl+Shift+T : Annoncer les informations de trafic
+- Ctrl+Shift+L : Rechercher un pays
+- Ctrl+Shift+F9 : Écrire un diagnostic dans le journal de NVDA
 """
 
 # ============================================================================
@@ -31,8 +33,16 @@ import controlTypes
 from NVDAObjects.UIA import UIA
 import ui
 import api
-import os
 import re
+import unicodedata
+
+try:
+    import wx
+    import gui
+    GUI_AVAILABLE = True
+except Exception as e:  # pragma: no cover - dépend de l'environnement NVDA
+    log.error(f"PROTONVPN: wx/gui unavailable: {e}")
+    GUI_AVAILABLE = False
 
 try:
     import addonHandler
@@ -58,7 +68,53 @@ IP_REGEX = re.compile(r'\b\d{1,3}(?:\.\d{1,3}){3}\b')
 
 # Libellés permettant d'identifier le widget Kill Switch, quelle que soit sa
 # position dans la colonne (l'ordre varie selon l'offre et la version de l'app).
-KILL_SWITCH_KEYWORDS = ("kill switch", "killswitch", "arrêt d'urgence")
+KILL_SWITCH_KEYWORDS = (
+    "kill switch", "killswitch", "arrêt d'urgence", "coupe-circuit",
+    "coupure d'urgence", "interrupteur d'arrêt",
+)
+
+# AutomationId réels des widgets de la colonne droite, relevés dans l'arbre UIA
+# de ProtonVPN. Il n'existe pas d'identifiant générique « WidgetButton » :
+# chaque widget porte le sien, d'où l'échec des recherches précédentes.
+WIDGET_AUTOMATION_IDS = {
+    "NetShieldWidgetButton": _("NetShield"),
+    "KillSwitchWidgetButton": _("Kill Switch"),
+    "SplitTunnelingWidgetButton": _("Split tunneling"),
+    "PortForwardingWidgetButton": _("Port forwarding"),
+}
+
+KILL_SWITCH_AUTOMATION_ID = "KillSwitchWidgetButton"
+
+# ProtonVPN expose un bouton par pays, dont l'AutomationId est préfixé
+# (Connect_to_DE, Connect_to_SN, Connect_to_Fastest…) et dont le contenu porte
+# le nom du pays dans la langue de l'interface.
+COUNTRY_BUTTON_PREFIX = "Connect_to_"
+
+# « Pays le plus rapide » ouvre la liste : son identifiant est exact, donc
+# trouvable instantanément, ce qui donne un point d'entrée vers le conteneur.
+COUNTRY_LIST_ANCHOR_ID = "Connect_to_Fastest"
+
+# Champ de recherche de ProtonVPN. Il filtre la liste complète des pays, y
+# compris ceux que l'interface n'a pas encore matérialisés : c'est la seule voie
+# fiable, notre propre liste ne voyant que les pays déjà affichés.
+SEARCH_BOX_AUTOMATION_ID = "SearchTextBox"
+
+# Garde-fou sur la photographie de la fenêtre : la liste des serveurs peut
+# compter des milliers d'éléments, inutile de tous les rapatrier.
+MAX_SNAPSHOT_ELEMENTS = 4000
+
+# Type de contrôle UIA d'un champ de saisie, repéré lors du diagnostic pour
+# localiser le champ de recherche de ProtonVPN.
+UIA_EDIT_CONTROL_TYPE = 50004
+
+# Quand le VPN est connecté, LocationDetailsPage n'existe pas : le changement de
+# serveur passe par ce bouton de la carte de connexion.
+CHANGE_SERVER_AUTOMATION_ID = "ConnectionCardChangeServerButton"
+
+# Position historique du Kill Switch dans la colonne, utilisée uniquement en
+# dernier recours quand ni l'identifiant ni le libellé ne permettent de le
+# reconnaître.
+KILL_SWITCH_FALLBACK_INDEX = 1
 
 # Textes d'état affichés par les widgets, comparés en égalité stricte :
 # une recherche par sous-chaîne ferait correspondre "on" à n'importe quel mot.
@@ -123,6 +179,326 @@ def redact(text):
 # ============================================================================
 # FONCTIONS UTILITAIRES - UIA
 # ============================================================================
+
+def _uia_attr(obj, *names):
+    """Retourne le premier attribut existant parmi names.
+
+    comtypes expose les membres COM tantôt en PascalCase, tantôt avec une
+    initiale minuscule selon la génération du typelib : on accepte les deux
+    plutôt que de parier sur une seule orthographe.
+    """
+    for name in names:
+        value = getattr(obj, name, None)
+        if value is not None:
+            return value
+    return None
+
+
+def get_uia_root():
+    """Retourne (élément UIA racine de la fenêtre, explication).
+
+    L'élément du premier plan n'est pas toujours un objet UIA : dans ce cas on
+    passe par le handle de fenêtre. Retourner l'explication permet de la
+    journaliser, faute de quoi un échec de ce chemin reste invisible.
+    """
+    fg = api.getForegroundObject()
+    if not fg:
+        return None, "no foreground object"
+
+    element = getattr(fg, 'UIAElement', None)
+    if element is not None:
+        return element, "foreground UIAElement"
+
+    try:
+        import UIAHandler
+        client = getattr(UIAHandler.handler, 'clientObject', None)
+        hwnd = getattr(fg, 'windowHandle', None)
+        from_handle = _uia_attr(client, 'ElementFromHandle', 'elementFromHandle') if client else None
+        if from_handle and hwnd:
+            element = from_handle(hwnd)
+            if element is not None:
+                return element, "ElementFromHandle"
+    except Exception as e:
+        return None, f"ElementFromHandle failed: {e}"
+
+    return None, "foreground exposes no UIA element"
+
+
+def find_via_uia_api(automation_id):
+    """Recherche par FindAll d'UIA. Retourne (liste, explication).
+
+    Un seul appel inter-processus, exécuté côté ProtonVPN, là où un parcours
+    récursif en déclenche un par nœud de l'arbre.
+
+    Les éléments sont récupérés avec la requête de cache de NVDA :
+    NVDAObjects.UIA lit des propriétés mises en cache à la construction, et un
+    élément obtenu sans cache fait échouer l'instanciation avec E_INVALIDARG.
+    """
+    try:
+        import UIAHandler
+
+        element, reason = get_uia_root()
+        if element is None:
+            return [], reason
+
+        client = getattr(UIAHandler.handler, 'clientObject', None)
+        create_condition = _uia_attr(
+            client, 'CreatePropertyCondition', 'createPropertyCondition'
+        ) if client else None
+        if create_condition is None:
+            return [], "no CreatePropertyCondition on UIA client"
+
+        property_id = getattr(UIAHandler, 'UIA_AutomationIdPropertyId', 30011)
+        scope = getattr(UIAHandler, 'TreeScope_Descendants', 4)
+        condition = create_condition(property_id, automation_id)
+
+        cache_request = getattr(UIAHandler.handler, 'baseCacheRequest', None)
+        find_all_cached = _uia_attr(element, 'FindAllBuildCache', 'findAllBuildCache')
+
+        if cache_request is not None and find_all_cached is not None:
+            array = find_all_cached(scope, condition, cache_request)
+            reason = f"{reason}+cache"
+        else:
+            find_all = _uia_attr(element, 'FindAll', 'findAll')
+            if find_all is None:
+                return [], "no FindAll on root element"
+            array = find_all(scope, condition)
+
+        if array is None:
+            return [], f"FindAll returned nothing ({reason})"
+
+        length = _uia_attr(array, 'Length', 'length')
+        get_element = _uia_attr(array, 'GetElement', 'getElement')
+        if length is None or get_element is None:
+            return [], "unexpected element array interface"
+
+        return [UIA(UIAElement=get_element(i)) for i in range(length)], reason
+
+    except Exception as e:
+        return [], f"{type(e).__name__}: {e}"
+
+
+def find_by_tree_walk(automation_ids, max_depth=15):
+    """Parcours récursif de secours, tous identifiants en une seule passe.
+
+    Lent — un appel inter-processus par nœud — mais indépendant des interfaces
+    UIA. Sert de filet quand la recherche rapide ne donne rien.
+    """
+    # Une chaîne doit être traitée comme un identifiant unique : set("Abc")
+    # produirait un ensemble de caractères, qui ne correspondrait à rien.
+    if isinstance(automation_ids, str):
+        automation_ids = (automation_ids,)
+
+    fg = api.getForegroundObject()
+    if not fg:
+        return []
+
+    wanted = set(automation_ids)
+    found = []
+
+    def search(obj, depth=0):
+        if depth > max_depth:
+            return
+        try:
+            if get_automation_id(obj) in wanted:
+                found.append(obj)
+            for child in obj.children:
+                search(child, depth + 1)
+        except Exception:
+            pass
+
+    search(fg)
+    return found
+
+
+def normalize_for_search(text):
+    """Minuscules sans accents, pour un filtre tolérant à la saisie.
+
+    Permet de trouver « Algérie » en tapant « algerie ».
+    """
+    decomposed = unicodedata.normalize('NFD', text or "")
+    stripped = ''.join(c for c in decomposed if unicodedata.category(c) != 'Mn')
+    return stripped.lower()
+
+
+def collect_country_buttons(root, max_depth):
+    """Boutons pays trouvés sous root, dans l'ordre de l'arbre.
+
+    Cet ordre correspond à l'ordre affiché, « Pays le plus rapide » en tête.
+    """
+    entries = []
+    seen = set()
+
+    def search(obj, depth=0):
+        if depth > max_depth:
+            return
+        try:
+            automation_id = get_automation_id(obj)
+            if automation_id.startswith(COUNTRY_BUTTON_PREFIX):
+                if automation_id not in seen:
+                    seen.add(automation_id)
+                    label = get_all_descendant_names(obj, 4).strip()
+                    entries.append((label or automation_id, obj))
+            for child in obj.children:
+                search(child, depth + 1)
+        except Exception:
+            pass
+
+    search(root)
+    return entries
+
+
+def snapshot_window_elements():
+    """Photographie la fenêtre en un seul appel : [(automationId, name, type)].
+
+    FindAllBuildCache rapatrie toutes les propriétés voulues d'un coup. Lire
+    ensuite obj.children ou obj.name élément par élément coûte un aller-retour
+    inter-processus à chaque accès : c'est ce qui gelait NVDA une dizaine de
+    secondes sur la liste des pays.
+
+    Retourne (éléments, explication). Les éléments sont dans l'ordre du
+    document, ce qui permet de rattacher un libellé au bouton qui le précède.
+    """
+    try:
+        import UIAHandler
+
+        root, reason = get_uia_root()
+        if root is None:
+            return [], reason
+
+        client = getattr(UIAHandler.handler, 'clientObject', None)
+        create_cache = _uia_attr(client, 'CreateCacheRequest', 'createCacheRequest') if client else None
+        create_true = _uia_attr(client, 'CreateTrueCondition', 'createTrueCondition') if client else None
+        find_all_cached = _uia_attr(root, 'FindAllBuildCache', 'findAllBuildCache')
+
+        if not (create_cache and create_true and find_all_cached):
+            return [], "cached search unavailable"
+
+        cache_request = create_cache()
+        add_property = _uia_attr(cache_request, 'AddProperty', 'addProperty')
+        if add_property is None:
+            return [], "cache request lacks AddProperty"
+
+        for property_id in (
+            getattr(UIAHandler, 'UIA_AutomationIdPropertyId', 30011),
+            getattr(UIAHandler, 'UIA_NamePropertyId', 30005),
+            getattr(UIAHandler, 'UIA_ControlTypePropertyId', 30003),
+        ):
+            add_property(property_id)
+
+        scope = getattr(UIAHandler, 'TreeScope_Descendants', 4)
+        array = find_all_cached(scope, create_true(), cache_request)
+        if array is None:
+            return [], "FindAllBuildCache returned nothing"
+
+        length = _uia_attr(array, 'Length', 'length') or 0
+        get_element = _uia_attr(array, 'GetElement', 'getElement')
+
+        snapshot = []
+        for index in range(min(length, MAX_SNAPSHOT_ELEMENTS)):
+            element = get_element(index)
+            try:
+                snapshot.append((
+                    _uia_attr(element, 'CachedAutomationId', 'cachedAutomationId') or "",
+                    _uia_attr(element, 'CachedName', 'cachedName') or "",
+                    _uia_attr(element, 'CachedControlType', 'cachedControlType') or 0,
+                    element,
+                ))
+            except Exception:
+                continue
+
+        return snapshot, f"{reason}, {len(snapshot)} elements"
+
+    except Exception as e:
+        return [], f"{type(e).__name__}: {e}"
+
+
+def pair_country_labels(snapshot):
+    """Associe à chaque bouton pays le libellé qui le suit.
+
+    FindAll rend les éléments dans l'ordre du document : un bouton
+    Connect_to_XX est suivi des textes qui l'habillent, dont le nom du pays.
+    On retient le premier nom non vide rencontré avant le bouton pays suivant.
+
+    Un bouton sans libellé conserve son identifiant : mieux vaut annoncer
+    « Connect_to_DE » que de faire disparaître le pays de la liste.
+    """
+    entries = []
+    pending = None
+
+    for automation_id, name, _control_type, element in snapshot:
+        if automation_id.startswith(COUNTRY_BUTTON_PREFIX):
+            if pending is not None:
+                entries.append(pending)
+            pending = (automation_id, element)
+        elif pending is not None and name.strip():
+            entries.append((name.strip(), pending[1]))
+            pending = None
+
+    if pending is not None:
+        entries.append(pending)
+
+    return entries
+
+
+def find_country_buttons(max_depth=8):
+    """Retourne [(libellé, cible)] des boutons de connexion par pays.
+
+    La cible est un élément UIA brut ou un NVDAObject selon le chemin emprunté ;
+    _connectToCountry accepte les deux.
+
+    Les identifiants sont préfixés (Connect_to_DE) et non exacts : la recherche
+    UIA par égalité ne s'y applique pas. On photographie donc la fenêtre en un
+    appel, puis on rattache à chaque bouton le premier libellé qui le suit dans
+    l'ordre du document.
+    """
+    snapshot, reason = snapshot_window_elements()
+
+    if snapshot:
+        entries = pair_country_labels(snapshot)
+        if entries:
+            return entries
+
+    # Repli : parcours récursif, lent mais indépendant des interfaces de cache.
+    log.info(f"PROTONVPN: cached country snapshot unusable ({reason}); walking tree")
+
+    fg = api.getForegroundObject()
+    return collect_country_buttons(fg, max_depth) if fg else []
+
+
+def find_uia_elements(automation_ids, first_only=False):
+    """Retourne les descendants portant l'un de ces AutomationId.
+
+    Accepte une chaîne ou une suite de chaînes. Tente la recherche rapide sur
+    chacune, puis retombe sur un parcours récursif unique couvrant toutes les
+    valeurs — plutôt qu'un parcours par identifiant.
+
+    Le repli est journalisé en niveau info : un échec silencieux du chemin
+    rapide se traduirait par des raccourcis qui échouent instantanément, ce qui
+    peut passer pour de la rapidité.
+    """
+    if isinstance(automation_ids, str):
+        automation_ids = (automation_ids,)
+
+    elements = []
+    reasons = []
+    for automation_id in automation_ids:
+        found, reason = find_via_uia_api(automation_id)
+        elements.extend(found)
+        if not found:
+            reasons.append(f"{automation_id}: {reason}")
+
+    if not elements:
+        log.info(
+            f"PROTONVPN: fast UIA search found nothing ({'; '.join(reasons)}); "
+            f"falling back to tree walk"
+        )
+        elements = find_by_tree_walk(automation_ids)
+
+    if first_only:
+        return elements[0] if elements else None
+    return elements
+
 
 def get_automation_id(obj):
     """Retourne l'AutomationId de l'objet."""
@@ -319,6 +695,41 @@ def get_all_text_descendants_as_string(obj, max_depth=5):
     if not texts:
         return ""
     return " ".join([t[0] for t in texts])
+
+
+def iter_descendant_names(obj, max_depth=6):
+    """Liste le nom de tous les descendants, quel que soit leur type de contrôle.
+
+    get_text_descendants ne retient que les éléments Text (50020) ; certains
+    libellés de ProtonVPN sont portés par d'autres types de contrôle et
+    passaient donc inaperçus, rendant des widgets non identifiables.
+    """
+    names = []
+
+    def recurse(node, depth):
+        if depth > max_depth:
+            return
+        try:
+            name = node.name
+            if name and name.strip():
+                names.append(name.strip())
+            for child in node.children:
+                recurse(child, depth + 1)
+        except Exception:
+            pass
+
+    try:
+        for child in obj.children:
+            recurse(child, 1)
+    except Exception:
+        pass
+
+    return names
+
+
+def get_all_descendant_names(obj, max_depth=6):
+    """Concatène le nom de tous les descendants, quel que soit leur type."""
+    return " ".join(iter_descendant_names(obj, max_depth))
 
 
 def get_sibling_texts(obj, direction="both", max_siblings=5):
@@ -690,16 +1101,45 @@ def extract_connection_details_label_and_values(obj):
 # WIDGETS COLONNE DROITE
 # ============================================================================
 
+def get_widget_identity_text(obj):
+    """Rassemble tout ce qui peut identifier un widget.
+
+    Nom, description, AutomationId et noms des descendants : ProtonVPN n'expose
+    pas ces libellés de façon uniforme, et se limiter aux éléments Text laissait
+    certains widgets non identifiables.
+
+    À ne pas appeler depuis _get_name : lire obj.name y relancerait _get_name.
+    """
+    parts = []
+
+    for getter in (
+        lambda: obj.name,
+        lambda: obj.description,
+        lambda: get_automation_id(obj),
+    ):
+        try:
+            value = getter()
+            if value:
+                parts.append(str(value))
+        except Exception:
+            pass
+
+    try:
+        parts.append(get_all_descendant_names(obj, 6))
+    except Exception:
+        pass
+
+    return " ".join(p for p in parts if p)
+
+
 def widget_matches_keywords(obj, keywords):
     """Vérifie qu'un widget porte bien l'un des libellés attendus.
 
-    Sert à identifier un widget par ce qu'il affiche plutôt que par son rang :
-    basculer un réglage de sécurité sur une simple supposition de position
-    reviendrait à modifier NetShield ou Split tunneling à l'insu de l'utilisateur.
+    Sert à identifier un widget par ce qu'il expose plutôt que par son rang :
+    l'ordre de la colonne varie selon l'offre et la version de ProtonVPN.
     """
     try:
-        haystack = (obj.name or "") + " " + get_all_text_descendants_as_string(obj, 4)
-        haystack = haystack.lower()
+        haystack = get_widget_identity_text(obj).lower()
         return any(kw in haystack for kw in keywords)
     except Exception as e:
         log.debugWarning(f"PROTONVPN: widget_matches_keywords error: {e}")
@@ -756,7 +1196,7 @@ def get_widget_state(obj):
     Retourne True (activé), False (désactivé), ou None si l'état n'est pas lisible.
     """
     try:
-        for text, _rect in get_text_descendants(obj, max_depth=4):
+        for text in iter_descendant_names(obj, max_depth=6):
             normalized = text.strip().lower().rstrip('.')
             if normalized in WIDGET_STATE_ON:
                 return True
@@ -855,7 +1295,7 @@ class ProtonVPNPlusPromoButton(UIA):
     Overlay pour le bouton VPN Plus promo.
     
     - name = "Passer à VPN Plus" (court, pour le focus)
-    - description = texte marketing long (accessible via NVDA+Tab ou Ctrl+Shift+L)
+    - description = texte marketing long (accessible via NVDA+Tab)
     """
 
     def _get_name(self):
@@ -885,14 +1325,18 @@ class ProtonVPNWidgetButton(UIA):
         return get_widget_state(self)
 
     def _get_name(self):
-        original_name = super().name or ""
-        displayed = original_name + " " + get_all_text_descendants_as_string(self, 4)
-
-        label = match_widget_label(displayed)
+        # L'AutomationId identifie le widget sans ambiguïté.
+        label = WIDGET_AUTOMATION_IDS.get(get_automation_id(self))
 
         if label is None:
-            # Widget non reconnu : conserver ce que fournit l'application.
-            label = original_name.strip() or _("ProtonVPN button")
+            # super().name et non self.name : lire self.name relancerait _get_name.
+            original_name = super().name or ""
+            displayed = original_name + " " + get_all_descendant_names(self, 6)
+            label = match_widget_label(displayed)
+
+            if label is None:
+                # Widget non reconnu : conserver ce que fournit l'application.
+                label = original_name.strip() or _("ProtonVPN button")
 
         if DEBUG_MODE:
             log.debug(f"PROTONVPN: WidgetButton.name → \"{label}\"")
@@ -943,15 +1387,100 @@ class ProtonVPNGenericButton(UIA):
 
     def _get_name(self):
         original_name = super().name or ""
-        automationId = get_automation_id(self)
 
         if original_name and len(original_name.strip()) > 2:
             return original_name
 
+        # Un bouton sans nom porte souvent son libellé dans son contenu : les
+        # boutons pays de ProtonVPN affichent ainsi « Allemagne », « Sénégal ».
+        # Annoncer l'AutomationId à la place rendait la liste des pays
+        # inutilisable — « Bouton (Connect_to_DE) » n'apprend rien.
+        displayed = get_all_descendant_names(self, 4).strip()
+        if displayed:
+            return displayed
+
+        automationId = get_automation_id(self)
         if automationId:
             return _("Button ({})").format(automationId)
 
         return _("Unnamed button")
+
+
+# ============================================================================
+# DIALOGUE DE SELECTION DE PAYS
+# ============================================================================
+
+if GUI_AVAILABLE:
+
+    class CountrySelectionDialog(wx.Dialog):
+        """Liste des pays avec champ de recherche.
+
+        Évite de parcourir plusieurs dizaines de boutons à la flèche : on tape
+        quelques lettres et on valide.
+        """
+
+        def __init__(self, parent, entries, on_select):
+            super().__init__(parent, title=_("Connect to a country"))
+
+            self._entries = entries
+            self._filtered = list(entries)
+            self._on_select = on_select
+
+            mainSizer = wx.BoxSizer(wx.VERTICAL)
+
+            mainSizer.Add(
+                wx.StaticText(self, label=_("&Filter:")),
+                flag=wx.ALL, border=5,
+            )
+            self._filterCtrl = wx.TextCtrl(self)
+            mainSizer.Add(self._filterCtrl, flag=wx.EXPAND | wx.ALL, border=5)
+
+            mainSizer.Add(
+                wx.StaticText(self, label=_("Cou&ntries:")),
+                flag=wx.ALL, border=5,
+            )
+            self._listBox = wx.ListBox(self, style=wx.LB_SINGLE, size=(320, 260))
+            mainSizer.Add(self._listBox, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
+
+            buttonSizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
+            if buttonSizer:
+                mainSizer.Add(buttonSizer, flag=wx.EXPAND | wx.ALL, border=5)
+
+            self.SetSizerAndFit(mainSizer)
+
+            self._filterCtrl.Bind(wx.EVT_TEXT, self._onFilterChanged)
+            self._listBox.Bind(wx.EVT_LISTBOX_DCLICK, self._onOk)
+            self.Bind(wx.EVT_BUTTON, self._onOk, id=wx.ID_OK)
+
+            self._refreshList()
+            self._filterCtrl.SetFocus()
+
+        def _refreshList(self):
+            self._listBox.Set([label for label, _obj in self._filtered])
+            if self._filtered:
+                self._listBox.SetSelection(0)
+
+        def _onFilterChanged(self, event):
+            needle = normalize_for_search(self._filterCtrl.GetValue())
+            self._filtered = [
+                entry for entry in self._entries
+                if needle in normalize_for_search(entry[0])
+            ]
+            self._refreshList()
+
+        def _onOk(self, event):
+            index = self._listBox.GetSelection()
+            if index == wx.NOT_FOUND or index >= len(self._filtered):
+                wx.Bell()
+                return
+
+            label, obj = self._filtered[index]
+            callback = self._on_select
+            self.Destroy()
+
+            # Activer après fermeture : le focus doit être revenu à ProtonVPN
+            # pour que l'activation aboutisse.
+            wx.CallLater(100, callback, label, obj)
 
 
 # ============================================================================
@@ -1007,12 +1536,12 @@ class AppModule(appModuleHandler.AppModule):
                     if DEBUG_MODE:
                         log.debug("PROTONVPN: → ProtonVPNLocationDetailsButton")
                 
-                # 4) WidgetButton
-                elif automationId == "WidgetButton":
+                # 5) Widgets de la colonne droite (NetShield, Kill Switch, etc.)
+                elif automationId in WIDGET_AUTOMATION_IDS:
                     clsList.insert(0, ProtonVPNWidgetButton)
-                
-                # 5) Autres widgets spécifiques
-                elif automationId in ("PortForwardingWidgetButton", "SettingsButton", "TitleBarMenuButton"):
+
+                # 6) Autres boutons à AutomationId connu
+                elif automationId in ("SettingsButton", "TitleBarMenuButton"):
                     clsList.insert(0, ProtonVPNSideWidgetButton)
                 
                 # 6) Fallback
@@ -1028,40 +1557,10 @@ class AppModule(appModuleHandler.AppModule):
     # SCRIPTS - ACTIONS VPN
     # ========================================================================
     
-    def _find_element_by_automation_id(self, target_id, max_depth=10):
-        """
-        Recherche un élément UIA par AutomationId dans l'arbre.
-        Retourne l'objet NVDA ou None.
-        """
-        try:
-            from NVDAObjects import NVDAObject
-            import UIAHandler
-            
-            # Obtenir la fenêtre principale
-            fg = api.getForegroundObject()
-            if not fg:
-                return None
-            
-            # Rechercher récursivement
-            def search(obj, depth):
-                if depth > max_depth:
-                    return None
-                try:
-                    if get_automation_id(obj) == target_id:
-                        return obj
-                    for child in obj.children:
-                        result = search(child, depth + 1)
-                        if result:
-                            return result
-                except:
-                    pass
-                return None
-            
-            return search(fg, 0)
-        except Exception as e:
-            log.error(f"PROTONVPN: _find_element_by_automation_id error: {e}")
-            return None
-    
+    def _find_element_by_automation_id(self, target_id):
+        """Recherche un élément par AutomationId. Retourne l'objet NVDA ou None."""
+        return find_uia_elements(target_id, first_only=True)
+
     def _invoke_via_pattern(self, obj, pattern_id_name, interface_name, method_name):
         """Déclenche un élément via un pattern UIA. Retourne True en cas de succès."""
         try:
@@ -1282,26 +1781,9 @@ class AppModule(appModuleHandler.AppModule):
     script_toggleVPN.__doc__ = _("Toggle VPN connection")
     script_toggleVPN.category = "ProtonVPN"
     
-    def _iter_widget_buttons(self, max_depth=15):
-        """Énumère les WidgetButton de la fenêtre au premier plan."""
-        widgets = []
-        fg = api.getForegroundObject()
-        if not fg:
-            return widgets
-
-        def search(obj, depth=0):
-            if depth > max_depth:
-                return
-            try:
-                if get_automation_id(obj) == "WidgetButton":
-                    widgets.append(obj)
-                for child in obj.children:
-                    search(child, depth + 1)
-            except Exception:
-                pass
-
-        search(fg)
-        return widgets
+    def _iter_widget_buttons(self):
+        """Énumère les widgets de la colonne droite."""
+        return find_uia_elements(tuple(WIDGET_AUTOMATION_IDS))
 
     def _find_widget_by_keywords(self, keywords):
         """Retourne le widget portant l'un des libellés donnés, ou None.
@@ -1313,16 +1795,114 @@ class AppModule(appModuleHandler.AppModule):
                 return widget
         return None
 
-    def _log_available_widgets(self):
-        """Journalise les libellés des widgets trouvés, pour diagnostic."""
+    def _log_widget_diagnostics(self, widgets, reason=""):
+        """Consigne tout ce que chaque widget expose.
+
+        Journalisé en niveau info, sans DEBUG_MODE : c'est la seule façon de
+        savoir sous quel libellé ProtonVPN présente réellement ses widgets et
+        d'ajuster WIDGET_DEFINITIONS en conséquence.
+        """
         try:
-            labels = [
-                redact(get_all_text_descendants_as_string(w, 4))
-                for w in self._iter_widget_buttons()
-            ]
-            log.debug(f"PROTONVPN: no matching widget. Available widgets: {labels}")
+            log.info(f"PROTONVPN DIAG: {len(widgets)} widget(s) found. {reason}")
+            for index, widget in enumerate(widgets):
+                try:
+                    log.info(
+                        f"PROTONVPN DIAG: [{index}] "
+                        f"automationId={get_automation_id(widget)!r} "
+                        f"name={redact(getattr(widget, 'name', '') or '')!r} "
+                        f"description={redact(getattr(widget, 'description', '') or '')!r} "
+                        f"descendants={redact(get_all_descendant_names(widget, 6))!r}"
+                    )
+                except Exception as e:
+                    log.info(f"PROTONVPN DIAG: [{index}] unreadable: {e}")
         except Exception as e:
-            log.debugWarning(f"PROTONVPN: _log_available_widgets error: {e}")
+            log.debugWarning(f"PROTONVPN: _log_widget_diagnostics error: {e}")
+
+    # AutomationId attendus, sondés lors du diagnostic pour savoir lesquels
+    # existent réellement dans la fenêtre.
+    DIAGNOSTIC_IDS = tuple(WIDGET_AUTOMATION_IDS) + (
+        "ConnectionCardConnectButton",
+        CHANGE_SERVER_AUTOMATION_ID,
+        "ConnectionCardDisconnectButton",
+        "ShowVolumeFlyoutButton",
+        "ShowIpFlyoutButton",
+        "LocationDetailsPage",
+        "ConnectionDetailsPage",
+        SEARCH_BOX_AUTOMATION_ID,
+    )
+
+    def script_logDiagnostics(self, gesture):
+        """Écrit dans le journal ce que ProtonVPN expose, pour diagnostic."""
+        try:
+            fg = api.getForegroundObject()
+            root, reason = get_uia_root()
+            log.info(
+                f"PROTONVPN DIAG: foreground class="
+                f"{getattr(fg, 'windowClassName', None)!r} "
+                f"hwnd={getattr(fg, 'windowHandle', None)} "
+                f"uiaRoot={'yes' if root is not None else 'no'} ({reason})"
+            )
+
+            # Comparer les deux méthodes de recherche sur chaque identifiant
+            # départage un problème d'API UIA d'un identifiant qui n'existe pas.
+            for automation_id in self.DIAGNOSTIC_IDS:
+                api_hits, api_reason = find_via_uia_api(automation_id)
+                walk_hits = find_by_tree_walk(automation_id)
+                log.info(
+                    f"PROTONVPN DIAG: {automation_id}: "
+                    f"uiaApi={len(api_hits)} ({api_reason}), "
+                    f"treeWalk={len(walk_hits)}"
+                )
+
+            # Le nombre de pays révèle si la liste est virtualisée : très en
+            # dessous de la soixantaine attendue, seuls les pays affichés
+            # existent dans l'arbre et la recherche serait incomplète.
+            # Champs de saisie : le champ de recherche de ProtonVPN permettrait
+            # d'atteindre les pays absents de l'arbre (liste virtualisée).
+            snapshot, snapshot_reason = snapshot_window_elements()
+            log.info(f"PROTONVPN DIAG: snapshot {len(snapshot)} elements ({snapshot_reason})")
+            edits = [
+                (automation_id, redact(name))
+                for automation_id, name, control_type, _el in snapshot
+                if control_type == UIA_EDIT_CONTROL_TYPE
+            ]
+            log.info(f"PROTONVPN DIAG: {len(edits)} edit field(s): {edits[:10]}")
+
+            countries = find_country_buttons()
+            log.info(f"PROTONVPN DIAG: {len(countries)} country button(s) found")
+            if countries:
+                labels = [label for label, _obj in countries]
+                # Le dernier pays de la liste tranche la question : s'il s'arrête
+                # au milieu de l'alphabet, seuls les pays affichés existent dans
+                # l'arbre et la recherche est incomplète.
+                log.info(f"PROTONVPN DIAG: first countries: {labels[:5]}")
+                log.info(f"PROTONVPN DIAG: last countries: {labels[-5:]}")
+
+            widgets = self._iter_widget_buttons()
+            self._log_widget_diagnostics(widgets, "manual diagnostics")
+
+            # Sans widget identifiable, lister les boutons de la fenêtre montre
+            # comment ProtonVPN structure réellement son interface.
+            if not widgets:
+                buttons = self._iter_buttons()
+                log.info(f"PROTONVPN DIAG: {len(buttons)} button(s) in window")
+                for index, button in enumerate(buttons[:40]):
+                    try:
+                        log.info(
+                            f"PROTONVPN DIAG: button[{index}] "
+                            f"automationId={get_automation_id(button)!r} "
+                            f"name={redact(getattr(button, 'name', '') or '')!r} "
+                            f"descendants={redact(get_all_descendant_names(button, 4))[:120]!r}"
+                        )
+                    except Exception as e:
+                        log.info(f"PROTONVPN DIAG: button[{index}] unreadable: {e}")
+        except Exception as e:
+            log.error(f"PROTONVPN: diagnostics failed: {e}")
+
+        ui.message(_("Diagnostics written to the NVDA log"))
+
+    script_logDiagnostics.__doc__ = _("Write ProtonVPN diagnostics to the NVDA log")
+    script_logDiagnostics.category = "ProtonVPN"
 
     def _announce_widget_state(self, keywords, label):
         """Relit et annonce l'état d'un widget après basculement."""
@@ -1347,18 +1927,39 @@ class AppModule(appModuleHandler.AppModule):
         log.debug("PROTONVPN: script_toggleKillSwitch triggered")
 
         try:
-            widget = self._find_widget_by_keywords(KILL_SWITCH_KEYWORDS)
+            # Identifiant exact d'abord : sans ambiguïté et sans heuristique.
+            widget = find_uia_elements(KILL_SWITCH_AUTOMATION_ID, first_only=True)
+
+            if widget is None:
+                widget = self._find_widget_by_keywords(KILL_SWITCH_KEYWORDS)
+
+            identified = widget is not None
+
+            if not identified:
+                # Aucun libellé exploitable : consigner ce que les widgets
+                # exposent réellement, pour pouvoir corriger l'identification.
+                widgets = self._iter_widget_buttons()
+                self._log_widget_diagnostics(widgets, "Kill Switch not identified")
+
+                # Puis retomber sur la position historique. Le widget ouvre un
+                # panneau, il ne bascule pas le réglage directement : si la
+                # position est mauvaise, l'utilisateur entend le panneau
+                # s'ouvrir et peut le refermer, sans qu'aucun réglage n'ait été
+                # modifié à son insu.
+                if len(widgets) > KILL_SWITCH_FALLBACK_INDEX:
+                    widget = widgets[KILL_SWITCH_FALLBACK_INDEX]
 
             if not widget:
-                # Refuser d'agir plutôt que de basculer un widget non identifié :
-                # le Kill Switch protège contre les fuites d'IP, et le widget
-                # voisin pourrait être NetShield ou Split tunneling.
-                self._log_available_widgets()
                 ui.message(_("Kill Switch not found"))
                 return
 
             if not self._invoke_element(widget):
                 ui.message(_("Action unavailable"))
+                return
+
+            if not identified:
+                # Position supposée : annoncer sans prétendre avoir vérifié.
+                ui.message(_("Kill Switch"))
                 return
 
             # L'état résultant est relu dans l'interface : ne jamais annoncer
@@ -1380,82 +1981,147 @@ class AppModule(appModuleHandler.AppModule):
     script_toggleKillSwitch.__doc__ = _("Toggle Kill Switch")
     script_toggleKillSwitch.category = "ProtonVPN"
     
+    def _find_location_buttons(self, max_depth=4):
+        """Boutons dynamiques de LocationDetailsPage (IP, Pays, Fournisseur).
+
+        La page est localisée par AutomationId, puis seul son sous-arbre est
+        parcouru : ces boutons n'ont pas d'AutomationId propre, mais explorer
+        une page coûte infiniment moins que toute la fenêtre.
+        """
+        page = self._find_element_by_automation_id("LocationDetailsPage")
+        if not page:
+            return []
+
+        buttons = []
+
+        def search(obj, depth=0):
+            if depth > max_depth:
+                return
+            try:
+                if obj.role == controlTypes.Role.BUTTON and not get_automation_id(obj):
+                    buttons.append(obj)
+                for child in obj.children:
+                    search(child, depth + 1)
+            except Exception:
+                pass
+
+        search(page)
+        return buttons
+
     def script_openCountrySelector(self, gesture):
         """Ouvrir le sélecteur de pays."""
-        log.info("PROTONVPN: script_openCountrySelector triggered!")
-        
-        # Chercher le bouton de sélection de pays
-        # C'est généralement le premier bouton sous LocationDetailsPage (index 1 = Pays)
+        log.debug("PROTONVPN: script_openCountrySelector triggered")
+
         try:
-            fg = api.getForegroundObject()
-            if not fg:
-                ui.message(_("Action unavailable"))
-                return
-            
-            # Chercher les boutons sous LocationDetailsPage
-            location_btns = []
-            def find_location_btns(obj, depth=0):
-                if depth > 15:
-                    return
-                try:
-                    if is_location_details_dynamic_button(obj):
-                        location_btns.append(obj)
-                    for child in obj.children:
-                        find_location_btns(child, depth + 1)
-                except:
-                    pass
-            
-            find_location_btns(fg)
-            
-            # Le bouton Pays est généralement le 2ème (index 1)
-            if len(location_btns) >= 2:
-                country_btn = location_btns[1]
-                ui.message(_("Country selector"))
-                if self._invoke_element(country_btn):
-                    log.info("PROTONVPN: Country selector opened")
-                else:
-                    ui.message(_("Action unavailable"))
-            else:
+            location_btns = self._find_location_buttons()
+
+            # Le bouton Pays est le 2ème (index 1)
+            country_btn = location_btns[1] if len(location_btns) >= 2 else None
+
+            if country_btn is None:
+                # VPN connecté : LocationDetailsPage n'existe pas, le changement
+                # de serveur passe par la carte de connexion.
+                country_btn = find_uia_elements(
+                    CHANGE_SERVER_AUTOMATION_ID, first_only=True
+                )
+
+            if country_btn is None:
                 ui.message(_("Country selector not found"))
+                return
+
+            ui.message(_("Country selector"))
+            if self._invoke_element(country_btn):
+                log.debug("PROTONVPN: Country selector opened")
+            else:
+                ui.message(_("Action unavailable"))
         except Exception as e:
             log.error(f"PROTONVPN: script_openCountrySelector error: {e}")
             ui.message(_("Action unavailable"))
     
     script_openCountrySelector.__doc__ = _("Open country selector")
     script_openCountrySelector.category = "ProtonVPN"
+
+    def script_connectToCountry(self, gesture):
+        """Rechercher un pays."""
+        log.debug("PROTONVPN: script_connectToCountry triggered")
+
+        # Voie principale : le champ de recherche de ProtonVPN, qui filtre la
+        # liste complète. Notre propre liste ne contient que les pays déjà
+        # matérialisés par l'interface — une quarantaine sur près de cent — et
+        # ne sert donc que de repli.
+        search_box = find_uia_elements(SEARCH_BOX_AUTOMATION_ID, first_only=True)
+        if search_box is not None:
+            try:
+                search_box.setFocus()
+                ui.message(_("Country search"))
+                return
+            except Exception as e:
+                log.debugWarning(f"PROTONVPN: cannot focus the search box: {e}")
+
+        if not GUI_AVAILABLE:
+            ui.message(_("Action unavailable"))
+            return
+
+        entries = find_country_buttons()
+        log.debug(f"PROTONVPN: {len(entries)} country button(s) found")
+
+        if not entries:
+            ui.message(_("Country list unavailable"))
+            return
+
+        wx.CallAfter(self._showCountryDialog, entries)
+
+    def _showCountryDialog(self, entries):
+        """Affiche le dialogue de sélection sur le thread principal de NVDA."""
+        try:
+            gui.mainFrame.prePopup()
+            try:
+                dialog = CountrySelectionDialog(
+                    gui.mainFrame, entries, self._connectToCountry
+                )
+                dialog.Show()
+            finally:
+                gui.mainFrame.postPopup()
+        except Exception as e:
+            log.error(f"PROTONVPN: country dialog failed: {e}")
+            ui.message(_("Action unavailable"))
+
+    def _connectToCountry(self, label, target):
+        """Active le bouton du pays choisi.
+
+        La cible est soit un NVDAObject, soit un élément UIA brut issu de la
+        photographie : on n'en construit un objet NVDA que pour celui-là.
+        """
+        try:
+            obj = target if hasattr(target, 'UIAElement') else UIA(UIAElement=target)
+        except Exception as e:
+            log.error(f"PROTONVPN: cannot wrap country element: {e}")
+            ui.message(_("Action unavailable"))
+            return
+
+        ui.message(_("Connecting to {country}").format(country=label))
+        if not self._invoke_element(obj):
+            ui.message(_("Action unavailable"))
+
+    script_connectToCountry.__doc__ = _("Search for a country")
+    script_connectToCountry.category = "ProtonVPN"
     
     def script_announceTraffic(self, gesture):
         """Annoncer les informations de trafic."""
-        log.info("PROTONVPN: script_announceTraffic triggered!")
+        log.debug("PROTONVPN: script_announceTraffic triggered")
         
         try:
-            fg = api.getForegroundObject()
-            if not fg:
-                ui.message(_("Action unavailable"))
-                return
-            
             traffic_info = []
-            
-            # Chercher les boutons de trafic sous ConnectionDetailsPage
-            def find_traffic_btns(obj, depth=0):
-                if depth > 15:
-                    return
-                try:
-                    if is_connection_details_dynamic_button(obj):
-                        automationId = get_automation_id(obj)
-                        # ShowVolumeFlyoutButton = Trafic total
-                        # E = Trafic actuel
-                        if automationId in ("ShowVolumeFlyoutButton", "E"):
-                            label, values = extract_connection_details_label_and_values(obj)
-                            if values:
-                                traffic_info.append(f"{label} : {', '.join(values)}")
-                    for child in obj.children:
-                        find_traffic_btns(child, depth + 1)
-                except:
-                    pass
-            
-            find_traffic_btns(fg)
-            
+
+            # Recherche ciblée par AutomationId : ShowVolumeFlyoutButton porte le
+            # trafic total, E le trafic courant. Interroger ces deux identifiants
+            # évite de parcourir tout l'arbre pour ne garder que deux éléments.
+            for automation_id in ("ShowVolumeFlyoutButton", "E"):
+                for obj in find_uia_elements(automation_id):
+                    label, values = extract_connection_details_label_and_values(obj)
+                    if values:
+                        traffic_info.append(f"{label} : {', '.join(values)}")
+
             if traffic_info:
                 message = ". ".join(traffic_info)
                 ui.message(message)
@@ -1477,6 +2143,8 @@ class AppModule(appModuleHandler.AppModule):
         "kb:control+shift+k": "toggleKillSwitch",
         "kb:control+shift+c": "openCountrySelector",
         "kb:control+shift+t": "announceTraffic",
+        "kb:control+shift+l": "connectToCountry",
+        "kb:control+shift+f9": "logDiagnostics",
     }
 
 
