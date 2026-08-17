@@ -46,10 +46,17 @@ Keyboard Shortcuts
 - Control+Shift+C: Open country selector
 - Control+Shift+T: Announce traffic information
 - Control+Shift+L: Search for a country
-- Control+Shift+F9: Write diagnostics to the NVDA log
 
 All shortcuts can be reassigned from NVDA's Input Gestures dialog,
 under the ProtonVPN category.
+
+Reporting a problem
+
+If something in ProtonVPN is announced incorrectly, press Control+Shift+F9 in
+the ProtonVPN window: the add-on writes diagnostics to the NVDA log. Attach that
+log to your report, it will help get the problem fixed.
+
+IP addresses are masked before being written.
 
 Notes
 
