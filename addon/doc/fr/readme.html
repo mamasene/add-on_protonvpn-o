@@ -17,6 +17,7 @@ Compatibilité NVDA : 2025.1 et ultérieur</p>
 <li>Des informations vocales sur l'état du VPN (adresse IP, pays, fournisseur, trafic)</li>
 <li>L'état activé ou désactivé de NetShield, de l'Arrêt d'urgence, du Split tunneling et de la Redirection de port</li>
 <li>Un accès direct au champ de recherche de pays</li>
+<li>Une liste cherchable de tous les pays et de toutes les villes affichés</li>
 <li>Des raccourcis clavier pour les actions VPN courantes</li>
 </ul>
 
@@ -33,17 +34,36 @@ Compatibilité NVDA : 2025.1 et ultérieur</p>
 <ul>
 <li>Contrôle+Maj+D : Connecter / Déconnecter le VPN</li>
 <li>Contrôle+Maj+K : Activer / Désactiver le Kill Switch</li>
-<li>Contrôle+Maj+C : Ouvrir le sélecteur de pays</li>
 <li>Contrôle+Maj+T : Annoncer les informations de trafic</li>
-<li>Contrôle+Maj+L : Rechercher un pays</li>
+<li>Contrôle+Maj+L : Rechercher un pays dans le champ de ProtonVPN</li>
+<li>Contrôle+Maj+O : Lister les pays et les villes</li>
+<li>Contrôle+Maj+F10 : Décrire le contrôle actif</li>
 </ul>
 <p>Tous les raccourcis sont modifiables depuis la boîte de dialogue Gestes de
 commandes de NVDA, dans la catégorie ProtonVPN.</p>
+
+<h2>Pays et villes</h2>
+<p>Contrôle+Maj+O ouvre la liste des pays et des villes actuellement affichés par
+ProtonVPN. Tapez quelques lettres pour filtrer : le filtre porte sur le pays
+comme sur la ville, « afrique » et « johan » menant tous deux à Johannesbourg.
+Validez par Entrée pour vous connecter à la ligne choisie.</p>
+<p>Un pays qui contient des villes annonce combien. Pour voir ses villes dans la
+fenêtre de ProtonVPN, déployez-le comme d'habitude ; l'add-on les lit ensuite
+dans l'ordre où elles sont affichées.</p>
+<p>ProtonVPN ne construit que les lignes visibles à l'écran. La liste de
+l'add-on reflète donc ce qui est affiché : pour atteindre un pays absent,
+passez par Contrôle+Maj+L, qui filtre la liste complète.</p>
 
 <h2>Signaler un problème</h2>
 <p>Si un élément de ProtonVPN est mal annoncé, pressez Contrôle+Maj+F9 dans la
 fenêtre de ProtonVPN : l'extension écrit un diagnostic dans le journal de NVDA.
 Joignez ce journal à votre signalement, il aidera à corriger le problème.</p>
+<p>Pour un contrôle précis, non étiqueté ou mal annoncé, placez-vous dessus et
+pressez Contrôle+Maj+F10. L'extension le décrit dans le journal et copie cette
+description dans le presse-papiers, prête à être collée dans votre signalement.
+Elle comprend l'identifiant du contrôle, son type, le nom que lui donne
+l'application, le nom annoncé par l'extension et ce que le contrôle contient
+réellement.</p>
 <p>Les adresses IP y sont masquées avant écriture.</p>
 
 <h2>Remarques</h2>
@@ -53,6 +73,155 @@ Ils dépendent de l'état actuel de la connexion VPN et des données disponibles
 <p>Il s'agit d'une extension communautaire non affiliée à Proton AG.</p>
 
 <h2>Historique des versions</h2>
+<h3>Version 2.0.0</h3>
+<p>Cette version rassemble tout ce qui a été fait depuis la 1.1.0 : plus de plantage dans la liste des villes, les villes couvertes, les libellés lus dans ce que l'application affiche, l'arrêt d'urgence réellement basculé, et plus rien qui vous identifie dans le journal. Les entrées ci-dessous détaillent chaque étape.</p>
+<h4>Améliorations</h4>
+<ul>
+<li>Le parcours de l'interface répond plus vite. NVDA redemande à un contrôle son nom, sa description et son état à chaque cycle &mdash; l'afficheur braille qui se rafraîchit, le focus qu'on relit &mdash; et chacune de ces demandes relisait tout le contenu du contrôle dans ProtonVPN : pour une ligne de pays et ses villes, plus d'une centaine d'éléments, plusieurs fois par seconde, sur un contrôle qui n'avait pas bougé. Ce qu'un contrôle affiche est maintenant relu deux fois par seconde au plus. L'état d'une protection, lui, continue d'être lu sur le contrôle chaque fois qu'il est annoncé.</li>
+<li>Nommer un contrôle ne remonte plus l'arbre quand son propre identifiant dit déjà ce qu'il est. Fermer les paramètres, Retour, Compte et les boutons de bannière coûtaient chacun cinq allers-retours vers l'application, à chaque passage du focus, pour une réponse qui ne changeait rien.</li>
+<li>Les pas dans l'arbre emportent désormais les propriétés dont ils ont besoin. Chaque pas était suivi d'un aller-retour par propriété lue : un parcours de cinq niveaux en payait quinze au lieu de cinq.</li>
+<li>Mesuré sur les dispositions de fenêtre que décrivent les diagnostics : un passage complet du focus sur les huit sortes de contrôle coûte 14 allers-retours vers ProtonVPN au lieu de 31, et une annonce rejouée sur un contrôle qui n'a pas bougé en coûte 2 au lieu de 16. Ces deux-là sont l'état d'une protection, relu à chaque fois qu'il est annoncé.</li>
+</ul>
+
+<h3>Version 1.8.2</h3>
+<h4>Corrections</h4>
+<ul>
+<li>Contrôle+Maj+K annonçait l'arrêt d'urgence introuvable lorsque les paramètres étaient ouverts sur une autre page, ce qui ressemblait à une panne. Dans cet état, aucun des deux contrôles n'est joignable : la colonne droite a disparu avec ses widgets, et l'interrupteur n'existe que sur sa propre page. L'extension indique maintenant de revenir en arrière.</li>
+<li>Le diagnostic demandait une dizaine de secondes dès qu'aucun widget n'était trouvé, ce qui est le cas sitôt les paramètres ouverts. Il détaille désormais moins de boutons, et ne lit le contenu que de ceux qui n'ont pas de nom, les seuls dont il apprenne quelque chose.</li>
+</ul>
+
+<h3>Version 1.8.1</h3>
+<h4>Corrections</h4>
+<ul>
+<li>Le protocole s'annonçait «&nbsp;Protocole : Protocole&nbsp;». Son texte descriptif n'était reconnu ni comme intitulé ni comme valeur, si bien qu'il restait dans les deux. Le mot «&nbsp;protocole&nbsp;» fait maintenant partie de ce que l'extension lit comme un intitulé.</li>
+<li>Le trafic courant annonçait les graduations du graphique au lieu des mesures : «&nbsp;Trafic actuel : 30, 15&nbsp;» plutôt que «&nbsp;16 Ko/s, 14 Ko/s&nbsp;». Les unités figuraient parmi les mots qui signalent un intitulé, si bien qu'une mesure qui en portait une était prise pour un intitulé et écartée. Une unité appartient à la mesure.</li>
+<li>Chaque détail est annoncé avec les mots que l'application affiche elle-même, le libellé de l'extension ne servant que lorsqu'aucun n'est reconnaissable. Ce libellé n'est traduit que dans les langues où l'extension l'est : le préférer aurait annoncé des mots anglais devant une fenêtre dans une autre langue.</li>
+</ul>
+<h4>Améliorations</h4>
+<ul>
+<li>Contrôle+Maj+F9 indique, pour chaque widget de la colonne droite, l'état lu sur le contrôle et les actions qu'il expose. C'est ce qui dira si l'arrêt d'urgence peut annoncer son état sans ouvrir ses réglages.</li>
+</ul>
+
+<h3>Version 1.8.0</h3>
+<h4>Changement</h4>
+<ul>
+<li>Contrôle+Maj+K bascule désormais l'arrêt d'urgence au lieu de s'arrêter à ses réglages. Le widget de la colonne droite n'est pas un interrupteur : l'activer ouvre la page de réglage, et le raccourci s'arrêtait là, sans même placer le curseur sur l'interrupteur. L'interrupteur, lui, est un contrôle distinct, et les deux n'existent jamais en même temps : sur la page principale, seul le widget existe ; la page ouverte, seul l'interrupteur existe. Le raccourci le bascule là où il se trouve, ou ouvre la page et le bascule ensuite, y place le curseur, et annonce l'état relu sur lui. Si la page s'ouvre sans que l'interrupteur apparaisse, rien n'est modifié et l'extension le dit.</li>
+</ul>
+<h4>Corrections</h4>
+<ul>
+<li>L'emplacement auquel vous êtes connecté est de retour dans la liste. Une fois connecté, son identifiant passe de «&nbsp;Connect to&nbsp;» à «&nbsp;Disconnect from&nbsp;», et l'extension ne connaissait que la première forme : le seul emplacement que vous pouviez vouloir quitter avait disparu de Contrôle+Maj+O. Il est maintenant listé, annoncé comme connecté, et l'activer est annoncé comme une déconnexion, ce qu'il fait.</li>
+<li>Le trafic courant ne lit plus le graphique. Celui-ci expose les graduations de son axe comme du texte, si bien que l'annonce donnait «&nbsp;13 Ko/s, 7,4 Ko/s, 600, 300, 0&nbsp;». Seules les mesures sont retenues, deux au plus.</li>
+<li>Le protocole est annoncé avec son intitulé : «&nbsp;Protocole : WireGuard (UDP)&nbsp;» et non «&nbsp;WireGuard (UDP)&nbsp;» seul. Il est écarté du raccourci de trafic, comme l'était déjà l'adresse du VPN.</li>
+<li>Le chevron qui déplie un pays pour montrer ses villes s'annonce «&nbsp;Déployer&nbsp;», et non par un mot tiré de son identifiant.</li>
+</ul>
+<h4>Améliorations</h4>
+<ul>
+<li>Contrôle+Maj+F9 sonde aussi le contrôle de protocole : un changement sur celui-ci apparaîtra dans un diagnostic.</li>
+</ul>
+
+<h3>Version 1.7.0</h3>
+<h4>Corrections</h4>
+<ul>
+<li>L'arrêt d'urgence dit s'il est actif ou non partout où cela se lit sur le contrôle lui-même, par l'API d'accessibilité de Windows : sur sa propre page de réglage, et dans ce que Contrôle+Maj+K relit après l'avoir basculé. Les quatre widgets de la colonne droite, eux, n'exposent qu'une action et rien d'autre : aucun état, et aucun texte qui en tienne lieu. Ils y sont donc annoncés par leur seul nom. Inventer un actif ou un inactif pour une protection d'après sa place dans la colonne est la seule chose que l'extension se refuse à faire. Il en va de même pour NetShield, le tunnel divisé et la redirection de port.</li>
+<li>L'état annoncé après un basculement vient de cette même source : il rapporte le réglage tel qu'il est, et non tel que l'écran le formule.</li>
+</ul>
+<h4>Nouveautés</h4>
+<ul>
+<li>La charge du serveur est annoncée. Le client connecté l'expose sur un contrôle que l'extension ne connaissait pas.</li>
+<li>Contrôle+Maj+T lit tout le panneau de détails de connexion au lieu de deux identifiants choisis d'avance : il rapporte ce que le panneau contient, connu de l'extension ou non. L'adresse du VPN en est écartée : c'est un détail de connexion, pas du trafic.</li>
+</ul>
+<h4>Améliorations</h4>
+<ul>
+<li>Contrôle+Maj+F9 sonde aussi le contrôle de charge du serveur et l'interrupteur de l'arrêt d'urgence : un changement sur l'un ou l'autre apparaîtra dans un diagnostic.</li>
+</ul>
+
+<h3>Version 1.6.1</h3>
+<h4>Corrections issues d'une relecture de sécurité indépendante de la 1.6.0</h4>
+<ul>
+<li>La dernière entrée de la liste des pays et des villes pouvait prendre son nom dans le panneau de connexion qui suit la liste, parce que rien ne bornait l'endroit où ce nom était cherché. Elle pouvait donc porter votre adresse IP réelle ou l'adresse de votre compte, dans la liste comme dans le journal. Le nom de chaque entrée est désormais cherché dans une fenêtre bornée, et la dernière entrée ne lit que son propre contenu.</li>
+<li>Le journal de diagnostic masque les noms des entrées de la liste, comme toutes les autres valeurs qu'il consigne.</li>
+<li>Choisir une entrée dans la liste vérifie maintenant qu'elle désigne toujours le même emplacement avant de connecter. La liste reste ouverte alors que ProtonVPN peut la reconstruire : l'extension pouvait donc se connecter à un autre pays que celui qu'elle annonçait, sans rien dire. Elle vous demande à présent de rouvrir la liste.</li>
+<li>L'état annoncé après avoir basculé l'arrêt d'urgence est relu sur le contrôle exact qui a été basculé, et non sur un contrôle reconnu par son libellé. Une lecture erronée aurait affirmé qu'une protection était active alors qu'elle ne l'était pas.</li>
+<li>Le repli qui retrouve le bouton de connexion par son libellé ne cherche plus dans l'identifiant interne du contrôle. Tous les boutons de la carte de connexion ont un identifiant contenant «&nbsp;Connect&nbsp;», si bien que le bouton de changement de serveur pouvait passer pour celui de connexion.</li>
+</ul>
+
+<h3>Version 1.6.0</h3>
+<h4>Suppression</h4>
+<ul>
+<li>Le raccourci Contrôle+Maj+C est retiré. Il annonçait ouvrir un sélecteur de pays, mais activait le deuxième bouton sans nom de la carte de connexion, choisi par sa position — un bouton d'information, pas un sélecteur — puis annonçait «&nbsp;Sélecteur de pays&nbsp;» quoi qu'il arrive. Son contrôle de repli était absent de tous les relevés faits sur ProtonVPN 5.1. Utilisez Contrôle+Maj+L pour le champ de recherche de ProtonVPN, ou Contrôle+Maj+O pour la liste des pays et des villes.</li>
+</ul>
+<h4>Corrections</h4>
+<ul>
+<li>Le journal de NVDA n'enregistre plus rien qui vous identifie. L'adresse du compte affichée par le bouton Compte y était écrite en entier, et c'est ce journal que l'on joint à un rapport de bug. Les adresses de compte et le nom du compte Windows dans les chemins sont désormais masqués, comme l'étaient déjà les adresses IP.</li>
+<li>Le raccourci de l'arrêt d'urgence ne se rabat plus sur la position du widget dans la colonne. Ce repli pouvait basculer un autre réglage de sécurité que celui demandé, sans bruit, parce que l'activation tente la bascule juste après l'invocation. L'arrêt d'urgence est identifié par son identifiant exact, trouvé dans tous les relevés ; faute de l'identifier, l'extension le dit et ne change rien.</li>
+<li>L'activation de dernier recours n'envoie plus la touche Entrée sans vérifier que le focus a atteint le contrôle visé. Un changement de focus refusé laissait cette frappe partir sur ce qui avait le focus auparavant.</li>
+</ul>
+
+<h3>Version 1.5.0</h3>
+<h4>Corrections</h4>
+<ul>
+<li>Une liste déroulante ne lit plus un nom de classe interne comme valeur. La liste de connexion par défaut annonçait «&nbsp;ProtonVPN.Client.UI.Main.Settings.Pages.ConnectionPreferences.DefaultConnectionItem&nbsp;» ; elle annonce maintenant ce qui est réellement sélectionné, par exemple «&nbsp;Pays le plus rapide&nbsp;».</li>
+<li>La liste de connexion par défaut, la bannière et les contrôles qui les entourent sont annoncés par un nom véritable, et non par leur identifiant mis en mots anglais.</li>
+</ul>
+<h4>Améliorations</h4>
+<ul>
+<li>Quand une sélection est illisible, aucune valeur n'est annoncée plutôt qu'un nom interne : une liste sans valeur annoncée se supporte mieux qu'un nom de classe lu à voix haute.</li>
+</ul>
+
+<h3>Version 1.4.0</h3>
+<h4>Corrections</h4>
+<ul>
+<li>Les cases à cocher et les boutons radio des paramètres sont annoncés par leur nom. ProtonVPN ne leur en donne pas, et l'extension ne regardait que les boutons : le type de NAT, le pilote OpenVPN et les options de réseau local n'étaient annoncés que par leur rôle.</li>
+<li>Les boutons qui portent un identifiant mais aucun nom sont annoncés aussi. Fermer les paramètres, Retour, Compte, le sélecteur de connexion par défaut et les boutons de bannière restaient muets.</li>
+<li>Ce qu'un réglage explique sous son intitulé se lit avec NVDA+Tab au lieu d'être perdu.</li>
+<li>Dans la liste de connexion par défaut, une entrée en deux parties est annoncée en entier : «&nbsp;États-Unis, Massachusetts&nbsp;» et non «&nbsp;États-Unis&nbsp;».</li>
+</ul>
+<h4>Nouveautés</h4>
+<ul>
+<li>Contrôle+Maj+F10 nomme désormais les rôles, les états et les types de contrôle au lieu d'en écrire les numéros : un rapport se lit sans table de correspondance.</li>
+</ul>
+<h4>Améliorations</h4>
+<ul>
+<li>Un contrôle que l'extension ne sait pas nommer est laissé à NVDA, qui annonce son rôle, plutôt que de recevoir une étiquette inventée. Quand l'identifiant en dit assez, il est mis en mots.</li>
+</ul>
+
+<h3>Version 1.3.0</h3>
+<h4>Corrections</h4>
+<ul>
+<li>Les villes sont rattachées au bon pays. ProtonVPN liste les villes d'un pays avant le pays lui-même, si bien que chaque ville était annoncée sous le pays qui la précède dans l'alphabet : Phnom Penh sous la Bulgarie au lieu du Cambodge.</li>
+<li>Les pays et les villes sont annoncés dans l'ordre où l'écran les présente : chaque pays, puis ses propres villes.</li>
+<li>Les noms internes que ProtonVPN expose pour son usage ne sont plus prononcés. Une ligne de pays se terminait par «&nbsp;ExpanderButtonContent&nbsp;».</li>
+<li>Dans les préférences de connexion, les cinq choix de la liste de connexion par défaut annonçaient tous la même chose. Chacun est désormais annoncé par ce qu'il affiche réellement.</li>
+</ul>
+<h4>Nouveautés</h4>
+<ul>
+<li>Contrôle+Maj+F10 décrit le contrôle actif dans le journal de NVDA et copie cette description dans le presse-papiers : identifiant, type, nom donné par l'application, nom annoncé par l'extension, états, contenu et actions disponibles. C'est ce qu'il faut pour signaler un contrôle mal étiqueté.</li>
+</ul>
+<h4>Améliorations</h4>
+<ul>
+<li>Les pays et les villes sont distingués par leur identifiant et non par leur position à l'écran. Cette position n'était pas lisible dans tous les cas, et une position illisible était prise pour le haut de la liste.</li>
+</ul>
+
+<h3>Version 1.2.0</h3>
+<h4>Corrections</h4>
+<ul>
+<li>NVDA ne plante plus quand vous ouvrez les villes d'un pays. Lire une ville amenait l'extension à lire la ligne du pays qui la contient, ce qui la ramenait à lire la ville, sans fin.</li>
+<li>Les pays et les villes sont annoncés dans l'ordre où ils sont affichés. Les villes apparaissaient jusqu'ici au milieu de la liste des pays, comme si elles en étaient.</li>
+<li>Les boutons qui portent déjà un nom ne sont plus renommés.</li>
+</ul>
+<h4>Nouveautés</h4>
+<ul>
+<li>Les villes sont couvertes. Contrôle+Maj+O ouvre une liste cherchable de tous les pays et de toutes les villes affichés, et chaque ville est annoncée avec le pays dont elle relève.</li>
+<li>Un pays qui contient des villes annonce combien.</li>
+<li>Ce qu'une ligne affiche en plus de son nom, comme le nombre de serveurs, se lit avec NVDA+Tab.</li>
+</ul>
+<h4>Améliorations</h4>
+<ul>
+<li>Testée avec NVDA 2026.3.</li>
+<li>L'extension lit la fenêtre de ProtonVPN d'un seul tenant au lieu d'élément en élément : les raccourcis répondent bien plus vite, et parcourir la liste des pays ne fait plus traîner NVDA.</li>
+<li>Contrôle+Maj+L vous place toujours dans le champ de recherche de ProtonVPN.</li>
+</ul>
+
 <h3>Version 1.1.0</h3>
 <h4>Nouveautés</h4>
 <ul>
