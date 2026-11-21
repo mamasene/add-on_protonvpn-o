@@ -26,5 +26,3 @@ addon/locale/*/manifest.ini
 *.bak
 *.swp
 *~
-.claude/
-CLAUDE.md
