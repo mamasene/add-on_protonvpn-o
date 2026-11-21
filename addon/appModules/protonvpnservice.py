@@ -3537,15 +3537,18 @@ class AppModule(appModuleHandler.AppModule):
                 # redact comme tout le reste. Une ligne dont la fenêtre de texte
                 # déborde sur le panneau de connexion pourrait porter l'adresse
                 # IP ou celle du compte, et ce journal part dans un rapport.
-                # Le conteneur de la ligne, qui dit de quelle liste elle vient.
-                # Le relevé du 21 novembre a montré trois lignes nommées en
-                # clair — « Connect_to_France » — classées en villes, alors que
-                # ce sont des pays : l'identifiant ne suffit donc pas toujours à
-                # trancher. Savoir dans quel panneau la ligne se trouve est ce
-                # qui manque pour le faire sans deviner.
+                # Les conteneurs de la ligne, et surtout celui qui tranche : le
+                # repli du pays, au cinquième niveau, et le pays qu'il porte au
+                # sixième. Le relevé du 21 novembre s'arrêtait au quatrième et
+                # ne montrait donc pas le signal dont la classification dépend —
+                # on y voyait trois pays classés en villes sans pouvoir dire
+                # pourquoi. La remontée va désormais jusque-là, ici seulement,
+                # sur un diagnostic que l'utilisateur déclenche.
                 containers = [
                     automation_id
-                    for automation_id in iter_ancestor_ids(row.element, 4)
+                    for automation_id in iter_ancestor_ids(
+                        row.element, ROW_CONTAINER_LEVELS
+                    )
                     if automation_id
                 ]
                 log.info(
