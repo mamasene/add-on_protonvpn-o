@@ -142,6 +142,15 @@ SIDE_BUTTON_LABELS = {
 # ce qui en fait un repère fiable de l'écran affiché.
 CLOSE_SETTINGS_AUTOMATION_ID = "CloseSettingsButton"
 
+# Pages des paramètres, telles que les ancêtres du contrôle actif les nomment.
+# KillSwitchPage n'y figure pas : l'interrupteur y est joignable, et il n'y a
+# donc rien à signaler à l'utilisateur qui s'y trouve.
+SETTINGS_PAGE_IDS = frozenset(("SettingsPage", "AdvancedSettingsPage"))
+
+# Le relevé du 21 novembre place SettingsPage au septième niveau au-dessus d'une
+# case à cocher des paramètres avancés : la remontée doit aller jusque-là.
+SETTINGS_ANCESTOR_LEVELS = 10
+
 AUTOMATION_ID_LABELS = {
     CLOSE_SETTINGS_AUTOMATION_ID: _("Close settings"),
     "GoBackButton": _("Back"),
@@ -987,45 +996,18 @@ def memoized_subtree_string(obj, limit=SUBTREE_MAX_ELEMENTS):
 # RECHERCHE PAR AUTOMATIONID
 # ============================================================================
 
-def _desktop_root():
-    """Élément racine du bureau, ou None."""
-    client = _client()
-    get_root = _uia_attr(client, 'GetRootElement', 'getRootElement') if client else None
-    if get_root is None:
-        return None
-    try:
-        return get_root()
-    except Exception as e:
-        log.debugWarning(f"PROTONVPN: no desktop root: {e}")
-        return None
-
-
-def _and_condition(first, second):
-    """Conjonction de deux conditions UIA, ou None."""
-    if first is None or second is None:
-        return None
-    client = _client()
-    create = _uia_attr(
-        client, 'CreateAndCondition', 'createAndCondition'
-    ) if client else None
-    if create is None:
-        return None
-    try:
-        return create(first, second)
-    except Exception as e:
-        log.debugWarning(f"PROTONVPN: cannot combine conditions: {e}")
-        return None
-
-
-def find_elements_by_automation_id(automation_id, process_id=None):
+def find_elements_by_automation_id(automation_id):
     """Éléments UIA portant cet AutomationId. Retourne (liste, explication).
 
     Un seul appel inter-processus, exécuté côté ProtonVPN, là où un parcours
     récursif en déclenche un par nœud de l'arbre.
 
-    La recherche part de la fenêtre de premier plan. ``process_id`` autorise une
-    seconde tentative, limitée à ce processus, lorsque la première ne rend rien :
-    voir plus bas pourquoi elle est nécessaire.
+    La recherche part de la fenêtre de premier plan, et s'arrête là. Une seconde
+    tentative depuis la racine du bureau, restreinte au processus, a été essayée
+    pour retrouver un contrôle qu'une infobulle aurait mis hors de portée : elle
+    coûtait 1,2 seconde par identifiant, gelait NVDA dix secondes sur un seul
+    appui de raccourci, et ne trouvait rien. Les widgets absents n'étaient pas
+    ailleurs : ils n'existaient pas.
     """
     root, reason = get_uia_root()
     if root is None:
@@ -1052,40 +1034,13 @@ def find_elements_by_automation_id(automation_id, process_id=None):
         _property_id('UIA_BoundingRectanglePropertyId', 30001),
     ), from_base=True)
 
-    descendants = _tree_scope('TreeScope_Descendants', 4)
-    elements, find_reason = _find_all(root, descendants, condition, cache_request)
-
-    if elements or not process_id:
-        return elements, f"{reason}, {find_reason}"
-
-    # Rien dans la fenêtre de premier plan. Elle n'est pas toujours celle qui
-    # porte le contrôle cherché : ProtonVPN ouvre ses infobulles et ses panneaux
-    # dans des fenêtres distinctes, et un widget de la colonne droite vit alors
-    # dans une autre fenêtre du même processus — hors de portée d'une recherche
-    # partie du premier plan.
-    #
-    # C'est la panne relevée à l'usage, deux fois : « 0 widget(s) found », et
-    # vingt secondes plus tard un diagnostic qui les trouvait tous les quatre.
-    # On recommence donc depuis le bureau, en restreignant au processus de
-    # ProtonVPN : le filtrage est fait par UIA, en un appel, et ce chemin ne
-    # coûte quelque chose que lorsque le premier a déjà échoué.
-    try:
-        scoped = _and_condition(condition, create_condition(
-            _property_id('UIA_ProcessIdPropertyId', 30002), int(process_id)
-        ))
-    except Exception as e:
-        return elements, f"{reason}, {find_reason}; process condition failed: {e}"
-
-    if scoped is None:
-        return elements, f"{reason}, {find_reason}; no process-wide condition"
-
-    wide, wide_reason = _find_all(
-        _desktop_root(), descendants, scoped, cache_request
+    elements, find_reason = _find_all(
+        root, _tree_scope('TreeScope_Descendants', 4), condition, cache_request
     )
-    return wide, f"{reason}, {find_reason}; process {process_id}: {wide_reason}"
+    return elements, f"{reason}, {find_reason}"
 
 
-def find_uia_elements(automation_ids, first_only=False, process_id=None):
+def find_uia_elements(automation_ids, first_only=False):
     """NVDAObjects portant l'un de ces AutomationId.
 
     Accepte une chaîne ou une suite de chaînes. Un échec est journalisé en
@@ -1100,7 +1055,7 @@ def find_uia_elements(automation_ids, first_only=False, process_id=None):
     reasons = []
 
     for automation_id in automation_ids:
-        elements, reason = find_elements_by_automation_id(automation_id, process_id)
+        elements, reason = find_elements_by_automation_id(automation_id)
         if not elements:
             reasons.append(f"{automation_id}: {reason}")
             continue
@@ -1645,6 +1600,41 @@ def kind_from_automation_id(automation_id):
     return KIND_CITY
 
 
+# Conteneur d'une ligne de pays : l'en-tête du groupe que ses villes
+# complètent. Le relevé du 21 novembre le donne pour les trois lignes visibles :
+#
+#   row id='Connect_to_France' containers=['Actions_for_France',
+#       'ListViewHeaderItem', 'ConnectionItemsList']
+LIST_HEADER_CONTAINER_ID = "ListViewHeaderItem"
+
+# Niveaux remontés pour trouver ce conteneur. Trois suffisent d'après le relevé,
+# et la borne compte : elle est payée une fois par ligne de la liste.
+ROW_CONTAINER_LEVELS = 3
+
+
+def kind_from_row(automation_id, element=None):
+    """Nature d'une ligne : un pays ou une ville.
+
+    Le conteneur fait foi quand il se prononce : ProtonVPN place chaque ligne de
+    pays dans un ``ListViewHeaderItem``, l'en-tête du groupe que ses villes
+    complètent.
+
+    À défaut, la forme de l'identifiant tranche, comme avant — un code à deux
+    lettres valant pays. Cette seule règle ne suffisait pas : ProtonVPN localise
+    parfois ses identifiants, « Connect_to_France » au lieu de
+    « Connect_to_FR », et la France passait alors pour une ville, rattachée dans
+    la liste de l'add-on au pays qui la suivait.
+    """
+    try:
+        for container in iter_ancestor_ids(element, ROW_CONTAINER_LEVELS):
+            if container == LIST_HEADER_CONTAINER_ID:
+                return KIND_COUNTRY
+    except Exception as e:
+        log.debugWarning(f"PROTONVPN: cannot read a row's container: {e}")
+
+    return kind_from_automation_id(automation_id)
+
+
 def snapshot_window_elements():
     """Photographie la fenêtre en un seul appel.
 
@@ -1712,7 +1702,7 @@ def _group_rows(raw_rows):
     dans l'ordre où l'écran les présente.
     """
     for row in raw_rows:
-        row['kind'] = kind_from_automation_id(row['automation_id'])
+        row['kind'] = kind_from_row(row['automation_id'], row.get('element'))
         row['country_label'] = ""
         row['nested'] = 0
 
@@ -2491,24 +2481,6 @@ class AppModule(appModuleHandler.AppModule):
         if DEBUG_MODE:
             ui.message(_("ProtonVPN add-on active"))
 
-    def _search(self, automation_ids, first_only=False):
-        """Recherche par identifiant, élargie au processus si le premier plan échoue.
-
-        La fenêtre de premier plan n'est pas toujours celle qui porte le
-        contrôle cherché. Transmettre le PID autorise la seconde tentative,
-        qui ne coûte quelque chose que lorsque la première n'a rien rendu.
-        """
-        return find_uia_elements(
-            automation_ids, first_only=first_only,
-            process_id=getattr(self, 'processID', None),
-        )
-
-    def _search_elements(self, automation_id):
-        """Éléments bruts portant cet identifiant, et l'explication d'un échec."""
-        return find_elements_by_automation_id(
-            automation_id, process_id=getattr(self, 'processID', None)
-        )
-
     # ========================================================================
     # CLASSIFICATION DES OBJETS
     # ========================================================================
@@ -2595,7 +2567,7 @@ class AppModule(appModuleHandler.AppModule):
 
     def _find_element_by_automation_id(self, target_id):
         """Recherche un élément par AutomationId. Retourne le NVDAObject ou None."""
-        return self._search(target_id, first_only=True)
+        return find_uia_elements(target_id, first_only=True)
 
     def _invoke_via_pattern(self, obj, pattern_id_name, interface_name, method_name):
         """Déclenche un élément via un pattern UIA. Retourne True en cas de succès."""
@@ -2840,7 +2812,7 @@ class AppModule(appModuleHandler.AppModule):
 
     def _iter_widget_buttons(self):
         """Énumère les widgets de la colonne droite."""
-        return self._search(tuple(WIDGET_AUTOMATION_IDS))
+        return find_uia_elements(tuple(WIDGET_AUTOMATION_IDS))
 
     def _find_widget_by_keywords(self, keywords):
         """Retourne le widget portant l'un des libellés donnés, ou None."""
@@ -2858,7 +2830,7 @@ class AppModule(appModuleHandler.AppModule):
         sécurité, une assurance fausse est pire qu'une absence d'annonce.
         """
         try:
-            widget = self._search(automation_id, first_only=True)
+            widget = find_uia_elements(automation_id, first_only=True)
             if widget is None:
                 widget = self._find_widget_by_keywords(keywords)
             state = get_widget_state(widget) if widget else None
@@ -2896,7 +2868,7 @@ class AppModule(appModuleHandler.AppModule):
         log.debug("PROTONVPN: script_toggleKillSwitch triggered")
 
         try:
-            toggle = self._search(
+            toggle = find_uia_elements(
                 KILL_SWITCH_TOGGLE_AUTOMATION_ID, first_only=True
             )
             if toggle is not None:
@@ -2904,7 +2876,7 @@ class AppModule(appModuleHandler.AppModule):
                 return
 
             # Identifiant exact d'abord : sans ambiguïté et sans heuristique.
-            widget = self._search(KILL_SWITCH_AUTOMATION_ID, first_only=True)
+            widget = find_uia_elements(KILL_SWITCH_AUTOMATION_ID, first_only=True)
             if widget is None:
                 widget = self._find_widget_by_keywords(KILL_SWITCH_KEYWORDS)
 
@@ -2952,20 +2924,36 @@ class AppModule(appModuleHandler.AppModule):
             ui.message(_("Action unavailable"))
 
     def _settings_are_open(self):
-        """Vrai si la fenêtre affiche les paramètres.
+        """Vrai si le contrôle actif se trouve dans les paramètres.
 
-        Reconnue au bouton qui les ferme : il n'existe que là. Sert à distinguer
-        « l'add-on ne trouve pas le contrôle » de « le contrôle n'est pas
-        joignable depuis cet écran », qui n'appellent pas la même conduite.
+        Sert à distinguer « l'add-on ne trouve pas le contrôle » de « le
+        contrôle n'est pas joignable depuis cet écran », qui n'appellent pas la
+        même conduite.
+
+        Reconnu sur les ancêtres du contrôle actif. La version précédente
+        cherchait le bouton qui ferme les paramètres par son identifiant, et ne
+        le trouvait pas : le relevé du 21 novembre annonce « settings page open:
+        False » alors que l'inspection du même contrôle, à la seconde près,
+        donne ses ancêtres — AdvancedSettingsPage, SettingsPage, MainPage.
+
+        Les ancêtres, eux, ne mentent pas, et ne coûtent que quelques pas
+        d'arbre. La page de l'arrêt d'urgence est tenue à l'écart : son
+        interrupteur y est joignable, et il n'y a donc rien à y signaler.
         """
-        elements, _reason = self._search_elements(
-            CLOSE_SETTINGS_AUTOMATION_ID
-        )
-        return bool(elements)
+        try:
+            element = _element_of(api.getFocusObject())
+            for automation_id in iter_ancestor_ids(
+                element, SETTINGS_ANCESTOR_LEVELS
+            ):
+                if automation_id in SETTINGS_PAGE_IDS:
+                    return True
+        except Exception as e:
+            log.debugWarning(f"PROTONVPN: cannot tell the settings apart: {e}")
+        return False
 
     def _flipKillSwitchWhenReady(self):
         """Bascule l'interrupteur une fois la page de réglage affichée."""
-        toggle = self._search(KILL_SWITCH_TOGGLE_AUTOMATION_ID, first_only=True)
+        toggle = find_uia_elements(KILL_SWITCH_TOGGLE_AUTOMATION_ID, first_only=True)
 
         if toggle is None:
             # La page ne s'est pas ouverte, ou pas assez vite. Ne rien forcer :
@@ -3027,7 +3015,7 @@ class AppModule(appModuleHandler.AppModule):
         """
         log.debug("PROTONVPN: script_connectToCountry triggered")
 
-        search_box = self._search(SEARCH_BOX_AUTOMATION_ID, first_only=True)
+        search_box = find_uia_elements(SEARCH_BOX_AUTOMATION_ID, first_only=True)
         if search_box is None:
             ui.message(_("Country search unavailable"))
             return
@@ -3426,7 +3414,7 @@ class AppModule(appModuleHandler.AppModule):
             )
 
             for automation_id in self.DIAGNOSTIC_IDS:
-                elements, find_reason = self._search_elements(automation_id)
+                elements, find_reason = find_elements_by_automation_id(automation_id)
                 log.info(
                     f"PROTONVPN DIAG: {automation_id}: "
                     f"{len(elements)} hit(s) ({find_reason})"
