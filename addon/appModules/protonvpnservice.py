@@ -143,9 +143,13 @@ SIDE_BUTTON_LABELS = {
 CLOSE_SETTINGS_AUTOMATION_ID = "CloseSettingsButton"
 
 # Pages des paramètres, telles que les ancêtres du contrôle actif les nomment.
-# KillSwitchPage n'y figure pas : l'interrupteur y est joignable, et il n'y a
-# donc rien à signaler à l'utilisateur qui s'y trouve.
 SETTINGS_PAGE_IDS = frozenset(("SettingsPage", "AdvancedSettingsPage"))
+
+# La page de l'arrêt d'urgence est elle-même un sous-écran des paramètres : le
+# relevé du 21 novembre la place sous SettingsPage. Elle est donc reconnue en
+# premier, et tient la remontée : l'interrupteur y est joignable, et dire à
+# quelqu'un de revenir en arrière alors qu'il est déjà devant n'aiderait pas.
+KILL_SWITCH_PAGE_ID = "KillSwitchPage"
 
 # Le relevé du 21 novembre place SettingsPage au septième niveau au-dessus d'une
 # case à cocher des paramètres avancés : la remontée doit aller jusque-là.
@@ -2945,6 +2949,8 @@ class AppModule(appModuleHandler.AppModule):
             for automation_id in iter_ancestor_ids(
                 element, SETTINGS_ANCESTOR_LEVELS
             ):
+                if automation_id == KILL_SWITCH_PAGE_ID:
+                    return False
                 if automation_id in SETTINGS_PAGE_IDS:
                     return True
         except Exception as e:
