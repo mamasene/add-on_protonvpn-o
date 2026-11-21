@@ -26,11 +26,12 @@ ProtonVPN can now be used from end to end with NVDA: the cities are covered, eve
 
 New features:
 - The cities are there. Control+Shift+O opens a searchable list of every country and city on display, and each city is announced with the country it belongs to.
-- Control+Shift+L takes you to the ProtonVPN search field, to reach a country in a few letters.
-- Control+Shift+K turns the Kill Switch on and off, then tells you the state it reads back from it. In the right-hand column it announces its name alone: ProtonVPN does not publish its state there.
-- Control+Shift+T announces the connection: traffic, server load, VPN address and protocol.
-- Control+Shift+D connects and disconnects, and says so only once it has really happened.
 - Two shortcuts help with a bug report: Control+Shift+F9 writes a diagnostic to the NVDA log, and Control+Shift+F10 describes the control you are on.
+
+Changes:
+- Control+Shift+K turns the Kill Switch on and off. It used to stop at its settings page, without even placing the cursor on the switch. In the right-hand column it announces its name alone: ProtonVPN does not publish its state there.
+- Control+Shift+T announces the whole connection panel, traffic, server load, VPN address and protocol, instead of two values chosen in advance.
+- The Control+Shift+C shortcut is gone. It claimed to open a country selector and pressed whichever unnamed button came second in the connection card.
 
 Fixes:
 - NVDA no longer crashes when you open the cities of a country.
@@ -38,13 +39,31 @@ Fixes:
 - The country you are connected to is in the list, and says that it is connected.
 - Buttons, check boxes and radio buttons that announced nothing now have a name, in the main window as well as in the settings.
 - Internal names are no longer read out loud, neither as a name nor as the value of a drop-down list.
-- The add-on speaks French.
-- Your IP address and your account address no longer reach the NVDA log, which is the file you attach to a bug report.
-- A shortcut that pressed the wrong button has been removed, and the Kill Switch can no longer be mistaken for another protection.
+- Nothing that identifies you reaches the NVDA log, the file you attach to a bug report: your account address is masked, as your IP address already was.
+- The Kill Switch can no longer be mistaken for another protection.
 
 Improvements:
 - Moving through the interface answers straight away. Going down the country list no longer makes NVDA lag, and the shortcuts answer without waiting.
 - Tested with NVDA 2026.3.1.
+
+Version 1.1.0:
+
+New features:
+- Search for a country with Control+Shift+L: the add-on takes you straight to the ProtonVPN search field. Type a few letters to reach any country.
+- The country list is now readable: each country is announced by its name.
+- The country list tabs (All countries, Secure Core, P2P, Tor) are announced by their name.
+- NetShield, Kill Switch, Split tunneling and Port forwarding are announced by name, together with whether each one is on or off.
+
+Fixes:
+- The add-on now speaks French.
+- The Kill Switch, traffic and country shortcuts work again, including while the VPN is connected.
+- Connection and disconnection are announced only once they have actually happened, and the add-on tells you if nothing changed.
+
+Improvements:
+- Keyboard shortcuts respond much faster.
+- NVDA no longer freezes while ProtonVPN is establishing a connection.
+- Your IP address is no longer recorded in the NVDA log.
+- The add-on summary, description and version history are available in French.
 
 Version 1.0.1:
 - Updated add-on display name for international users

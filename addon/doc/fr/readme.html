@@ -79,11 +79,13 @@ Ils dépendent de l'état actuel de la connexion VPN et des données disponibles
 <h4>Nouveautés</h4>
 <ul>
 <li>Les villes sont là. Contrôle+Maj+O ouvre la liste de tous les pays et de toutes les villes affichés, avec une recherche, et chaque ville est annoncée avec son pays.</li>
-<li>Contrôle+Maj+L vous amène au champ de recherche de ProtonVPN, pour atteindre un pays en quelques lettres.</li>
-<li>Contrôle+Maj+K active et désactive l'arrêt d'urgence, puis vous dit l'état qu'il relit dessus. Dans la colonne de droite, il annonce son nom seul : ProtonVPN n'y publie pas son état.</li>
-<li>Contrôle+Maj+T annonce la connexion : trafic, charge du serveur, adresse du VPN et protocole.</li>
-<li>Contrôle+Maj+D connecte et déconnecte, et ne l'annonce qu'une fois que c'est vraiment fait.</li>
 <li>Deux raccourcis aident à signaler un problème : Contrôle+Maj+F9 écrit un diagnostic dans le journal de NVDA, et Contrôle+Maj+F10 décrit le contrôle sur lequel vous êtes.</li>
+</ul>
+<h4>Changements</h4>
+<ul>
+<li>Contrôle+Maj+K active et désactive l'arrêt d'urgence. Il s'arrêtait jusqu'ici à sa page de réglage, sans même placer le curseur sur l'interrupteur. Dans la colonne de droite, il annonce son nom seul : ProtonVPN n'y publie pas son état.</li>
+<li>Contrôle+Maj+T annonce tout le panneau de connexion, trafic, charge du serveur, adresse du VPN et protocole, au lieu de deux valeurs choisies d'avance.</li>
+<li>Le raccourci Contrôle+Maj+C a été retiré. Il prétendait ouvrir un sélecteur de pays et appuyait sur le deuxième bouton sans nom de la carte de connexion.</li>
 </ul>
 <h4>Corrections</h4>
 <ul>
@@ -92,14 +94,35 @@ Ils dépendent de l'état actuel de la connexion VPN et des données disponibles
 <li>Le pays auquel vous êtes connecté figure dans la liste, et dit qu'il est connecté.</li>
 <li>Les boutons, les cases à cocher et les boutons radio qui n'annonçaient rien ont un nom, dans la fenêtre principale comme dans les paramètres.</li>
 <li>Les noms internes ne sont plus lus à voix haute, ni comme nom ni comme valeur d'une liste déroulante.</li>
-<li>L'extension parle français.</li>
-<li>Votre adresse IP et l'adresse de votre compte n'arrivent plus dans le journal de NVDA, celui que l'on joint à un signalement.</li>
-<li>Un raccourci qui appuyait sur le mauvais bouton a été retiré, et l'arrêt d'urgence ne peut plus être confondu avec une autre protection.</li>
+<li>Plus rien qui vous identifie n'arrive dans le journal de NVDA, celui que l'on joint à un signalement : l'adresse de votre compte est masquée, comme l'était déjà votre adresse IP.</li>
+<li>L'arrêt d'urgence ne peut plus être confondu avec une autre protection.</li>
 </ul>
 <h4>Améliorations</h4>
 <ul>
 <li>Le parcours de l'interface répond tout de suite. Descendre la liste des pays ne fait plus ralentir NVDA, et les raccourcis répondent sans attendre.</li>
 <li>Testée avec NVDA 2026.3.1.</li>
+</ul>
+
+<h3>Version 1.1.0</h3>
+<h4>Nouveautés</h4>
+<ul>
+<li>Recherche d'un pays par Contrôle+Maj+L : l'extension vous place directement dans le champ de recherche de ProtonVPN. Tapez quelques lettres pour atteindre n'importe quel pays.</li>
+<li>La liste des pays est enfin lisible : chaque pays est annoncé par son nom.</li>
+<li>Les onglets de la liste des pays (Tous les pays, Secure Core, P2P, Tor) sont annoncés par leur nom.</li>
+<li>NetShield, Arrêt d'urgence, Split tunneling et Redirection de port sont annoncés par leur nom, avec leur état activé ou désactivé.</li>
+</ul>
+<h4>Corrections</h4>
+<ul>
+<li>L'extension parle désormais français.</li>
+<li>Les raccourcis Arrêt d'urgence, trafic et pays fonctionnent à nouveau, y compris lorsque le VPN est connecté.</li>
+<li>La connexion et la déconnexion ne sont annoncées qu'une fois réellement effectuées, et l'extension vous prévient si rien n'a changé.</li>
+</ul>
+<h4>Améliorations</h4>
+<ul>
+<li>Les raccourcis clavier répondent beaucoup plus vite.</li>
+<li>NVDA ne se fige plus pendant que ProtonVPN établit la connexion.</li>
+<li>Votre adresse IP n'est plus enregistrée dans le journal de NVDA.</li>
+<li>Le résumé, la description et l'historique des versions sont disponibles en français.</li>
 </ul>
 
 <h3>Version 1.0.1</h3>
