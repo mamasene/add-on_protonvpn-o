@@ -44,7 +44,7 @@ Fixes:
 
 Improvements:
 - Moving through the interface answers straight away. Going down the country list no longer makes NVDA lag, and the shortcuts answer without waiting.
-- Tested with NVDA 2026.3.
+- Tested with NVDA 2026.3.1.
 
 Version 1.0.1:
 - Updated add-on display name for international users
@@ -63,7 +63,7 @@ Version 1.0.0:
     "addon_sourceURL": "https://github.com/mamasene/add-on_protonvpn-o",
     "addon_docFileName": "readme.html",
     "addon_minimumNVDAVersion": "2025.1",
-    "addon_lastTestedNVDAVersion": "2026.3",
+    "addon_lastTestedNVDAVersion": "2026.3.1",
     "addon_updateChannel": "stable",
     "addon_license": "GPL v2",
     "addon_licenseURL": "https://www.gnu.org/licenses/gpl-2.0.html",

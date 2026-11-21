@@ -7,8 +7,8 @@ Download stable version
 Source code on GitHub
 
 NVDA compatibility:
-- Minimum version: 2025.1
-- Tested with: NVDA 2026.3
+- Minimum NVDA version: 2025.1
+- Last tested NVDA version: 2026.3.1
 
 Presentation
 
@@ -116,7 +116,7 @@ Fixes
 
 Improvements
 - Moving through the interface answers straight away. Going down the country list no longer makes NVDA lag, and the shortcuts answer without waiting.
-- Tested with NVDA 2026.3.
+- Tested with NVDA 2026.3.1.
 
 Version 1.0.1
 - Updated add-on display name for international users
