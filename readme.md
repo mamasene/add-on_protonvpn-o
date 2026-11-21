@@ -103,7 +103,7 @@ New features
 Changes
 - Control+Shift+K turns the Kill Switch on and off. It used to stop at its settings page, without even placing the cursor on the switch. In the right-hand column it announces its name alone: ProtonVPN does not publish its state there.
 - Control+Shift+T announces the whole connection panel, traffic, server load, VPN address and protocol, instead of two values chosen in advance.
-- The Control+Shift+C shortcut is gone. It claimed to open a country selector and pressed whichever unnamed button came second in the connection card.
+- The Control+Shift+C shortcut is gone. To reach a country, use Control+Shift+L for the ProtonVPN search field, or Control+Shift+O for the list of countries and cities.
 
 Fixes
 - NVDA no longer crashes when you open the cities of a country.
@@ -116,7 +116,6 @@ Fixes
 
 Improvements
 - Moving through the interface answers straight away. Going down the country list no longer makes NVDA lag, and the shortcuts answer without waiting.
-- Tested with NVDA 2026.3.1.
 
 Version 1.1.0
 
