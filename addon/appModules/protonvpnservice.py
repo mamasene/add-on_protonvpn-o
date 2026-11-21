@@ -3456,11 +3456,23 @@ class AppModule(appModuleHandler.AppModule):
                 # redact comme tout le reste. Une ligne dont la fenêtre de texte
                 # déborde sur le panneau de connexion pourrait porter l'adresse
                 # IP ou celle du compte, et ce journal part dans un rapport.
+                # Le conteneur de la ligne, qui dit de quelle liste elle vient.
+                # Le relevé du 21 novembre a montré trois lignes nommées en
+                # clair — « Connect_to_France » — classées en villes, alors que
+                # ce sont des pays : l'identifiant ne suffit donc pas toujours à
+                # trancher. Savoir dans quel panneau la ligne se trouve est ce
+                # qui manque pour le faire sans deviner.
+                containers = [
+                    automation_id
+                    for automation_id in iter_ancestor_ids(row.element, 4)
+                    if automation_id
+                ]
                 log.info(
                     f"PROTONVPN DIAG: row id={row.automation_id!r} kind={row.kind} "
                     f"label={redact(row.label)!r} "
                     f"country={redact(row.country_label)!r} "
                     f"nested={row.nested} rect={row.rect} "
+                    f"containers={containers} "
                     f"announced={redact(format_location(row))!r}"
                 )
 
