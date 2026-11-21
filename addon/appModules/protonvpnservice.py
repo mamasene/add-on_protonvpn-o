@@ -1604,39 +1604,87 @@ def kind_from_automation_id(automation_id):
     return KIND_CITY
 
 
-# Conteneur d'une ligne de pays : l'en-tête du groupe que ses villes
-# complètent. Le relevé du 21 novembre le donne pour les trois lignes visibles :
+# Le repli d'un pays. Les villes d'un pays déployé vivent dedans ; la ligne du
+# pays, non. Le relevé du 21 novembre donne les deux chaînes côte à côte :
 #
-#   row id='Connect_to_France' containers=['Actions_for_France',
-#       'ListViewHeaderItem', 'ConnectionItemsList']
-LIST_HEADER_CONTAINER_ID = "ListViewHeaderItem"
+#   Albanie : ['Navigate_to_AL', '', 'ListViewHeaderItem',
+#              'ConnectionItemsList', 'CountriesPage', ...]
+#   Tirana  : ['Navigate_to_Tirana', '', 'ListViewHeaderItem',
+#              'ConnectionItemsList', 'ExpanderButton', 'Navigate_to_AL', ...]
+#
+# Et l'ancêtre qui suit ce repli nomme le pays : Navigate_to_AL. La ligne dit
+# donc elle-même à quel pays elle appartient, là où l'add-on le déduisait de sa
+# position dans la liste.
+#
+# Un ListViewHeaderItem ne distingue rien : les deux en ont un. S'y fier
+# comptait quarante-deux pays et aucune ville.
+EXPANDER_CONTAINER_ID = "ExpanderButton"
 
-# Niveaux remontés pour trouver ce conteneur. Trois suffisent d'après le relevé,
-# et la borne compte : elle est payée une fois par ligne de la liste.
-ROW_CONTAINER_LEVELS = 3
+# Préfixes des conteneurs qui nomment un lieu, à côté de ceux des lignes.
+CONTAINER_LOCATION_PREFIXES = ("Navigate_to_", "Actions_for_")
+
+# La page qui porte la liste : CountriesPage, RecentsPage. La remontée s'y
+# arrête, puisqu'au-delà il n'y a plus de repli à trouver.
+PAGE_CONTAINER_SUFFIX = "Page"
+
+# Niveaux remontés : le repli est au cinquième, le pays qu'il porte au sixième.
+# La borne compte, elle est payée une fois par ligne de la liste — mais
+# seulement à l'ouverture de la liste, jamais au passage du focus.
+ROW_CONTAINER_LEVELS = 6
+
+
+def container_location_key(automation_id):
+    """Lieu nommé par un conteneur, en minuscules, ou "".
+
+    Navigate_to_AL rend « al », qui rejoint le « al » de Connect_to_AL.
+    """
+    for prefix in CONTAINER_LOCATION_PREFIXES:
+        if automation_id.startswith(prefix):
+            return automation_id[len(prefix):].strip().lower()
+    return ""
+
+
+def row_location_key(automation_id):
+    """Lieu nommé par une ligne, en minuscules, ou ""."""
+    return location_suffix(automation_id).strip().lower()
+
+
+def row_context(automation_id, element=None):
+    """Nature d'une ligne et pays dont elle dépend : (kind, clé du pays).
+
+    Lue sur les ancêtres, qui ne mentent pas. Une ligne enfermée dans le repli
+    d'un pays est une de ses villes, et le conteneur suivant nomme ce pays.
+    Hors de tout repli, c'est un pays.
+
+    Quand la remontée ne rend rien — élément absent, arbre indisponible — la
+    forme de l'identifiant tranche, comme avant : un code à deux lettres vaut
+    pays. Cette règle seule ne suffit pas, ProtonVPN localisant parfois ses
+    identifiants (« Connect_to_France » au lieu de « Connect_to_FR »).
+    """
+    seen = False
+    try:
+        containers = iter_ancestor_ids(element, ROW_CONTAINER_LEVELS)
+        for container in containers:
+            seen = True
+            if container == EXPANDER_CONTAINER_ID:
+                parent = next(containers, "")
+                return KIND_CITY, container_location_key(parent)
+            if container.endswith(PAGE_CONTAINER_SUFFIX):
+                # La page qui porte la liste. Au-delà, plus rien à apprendre :
+                # la ligne n'était dans aucun repli, c'est un pays.
+                break
+    except Exception as e:
+        log.debugWarning(f"PROTONVPN: cannot read a row's containers: {e}")
+
+    if not seen:
+        return kind_from_automation_id(automation_id), ""
+
+    return KIND_COUNTRY, ""
 
 
 def kind_from_row(automation_id, element=None):
-    """Nature d'une ligne : un pays ou une ville.
-
-    Le conteneur fait foi quand il se prononce : ProtonVPN place chaque ligne de
-    pays dans un ``ListViewHeaderItem``, l'en-tête du groupe que ses villes
-    complètent.
-
-    À défaut, la forme de l'identifiant tranche, comme avant — un code à deux
-    lettres valant pays. Cette seule règle ne suffisait pas : ProtonVPN localise
-    parfois ses identifiants, « Connect_to_France » au lieu de
-    « Connect_to_FR », et la France passait alors pour une ville, rattachée dans
-    la liste de l'add-on au pays qui la suivait.
-    """
-    try:
-        for container in iter_ancestor_ids(element, ROW_CONTAINER_LEVELS):
-            if container == LIST_HEADER_CONTAINER_ID:
-                return KIND_COUNTRY
-    except Exception as e:
-        log.debugWarning(f"PROTONVPN: cannot read a row's container: {e}")
-
-    return kind_from_automation_id(automation_id)
+    """Nature d'une ligne seule, sans son rattachement."""
+    return row_context(automation_id, element)[0]
 
 
 def snapshot_window_elements():
@@ -1696,46 +1744,85 @@ def _row_texts(snapshot, start, end):
 def _group_rows(raw_rows):
     """Classe les lignes, rattache chaque ville à son pays, rétablit l'ordre.
 
-    Dans l'arbre de ProtonVPN, les villes d'un pays précèdent la ligne de ce
-    pays : Phnom Penh arrive avant Cambodge, Montréal, Toronto et Vancouver
-    avant Canada, les États américains avant États-Unis. Le pays d'une ville est
-    donc la première ligne de pays qui la suit — et non celle qui la précède,
-    qui est le pays alphabétiquement précédent.
+    Le rattachement est lu sur l'arbre : une ville vit dans le repli de son
+    pays, et le conteneur qui porte ce repli nomme le pays. Plus de déduction
+    par la position, qui se trompait dès que l'ordre de l'arbre surprenait —
+    Tirana y précède Afrique du Sud aussi bien qu'Albanie.
+
+    La position reste le repli quand le pays n'a pas été nommé : dans l'arbre de
+    ProtonVPN, les villes précèdent la ligne de leur pays.
 
     Les lignes rendues sont réordonnées en pays puis ses villes, c'est-à-dire
     dans l'ordre où l'écran les présente.
     """
     for row in raw_rows:
-        row['kind'] = kind_from_row(row['automation_id'], row.get('element'))
+        kind, parent_key = row_context(row['automation_id'], row.get('element'))
+        row['kind'] = kind
+        row['parent_key'] = parent_key
         row['country_label'] = ""
         row['nested'] = 0
 
-    ordered = []
+    # Les pays, repérables par le lieu que porte leur identifiant.
+    countries_by_key = {}
+    for row in raw_rows:
+        if row['kind'] != KIND_COUNTRY:
+            continue
+        key = row_location_key(row['automation_id'])
+        if key:
+            countries_by_key.setdefault(key, row)
+
+    # Rattachement nommé : la ville dit de quel pays elle dépend.
+    children = {}
+    named = set()
+    for row in raw_rows:
+        if row['kind'] != KIND_CITY:
+            continue
+        owner = countries_by_key.get(row['parent_key'])
+        if owner is None:
+            continue
+        children.setdefault(id(owner), []).append(row)
+        named.add(id(row))
+
+    # Repli pour les villes dont le pays n'a pas été nommé : la première ligne
+    # de pays qui les suit. Dans l'arbre de ProtonVPN, les villes précèdent leur
+    # pays — Berlin et Francfort avant Allemagne, Tirana avant Albanie.
     pending_cities = []
     last_country = None
 
     for row in raw_rows:
         if row['kind'] == KIND_CITY:
-            pending_cities.append(row)
+            if id(row) not in named:
+                pending_cities.append(row)
             continue
 
-        ordered.append(row)
         for city in pending_cities:
-            city['country_label'] = row['label']
-            ordered.append(city)
-        row['nested'] = len(pending_cities)
+            children.setdefault(id(row), []).append(city)
         pending_cities = []
         last_country = row
 
     # Villes qu'aucune ligne de pays ne suit : la liste s'arrête au milieu d'un
     # pays déployé. Les rattacher au dernier pays connu reste la meilleure
     # lecture possible, et vaut mieux que de les faire disparaître.
+    orphans = []
     for city in pending_cities:
-        if last_country is not None:
-            city['country_label'] = last_country['label']
-            last_country['nested'] += 1
-        ordered.append(city)
+        if last_country is None:
+            orphans.append(city)
+        else:
+            children.setdefault(id(last_country), []).append(city)
 
+    # Chaque pays, puis ses villes : l'ordre où l'écran les présente.
+    ordered = []
+    for row in raw_rows:
+        if row['kind'] == KIND_CITY:
+            continue
+        ordered.append(row)
+        cities = children.get(id(row), [])
+        row['nested'] = len(cities)
+        for city in cities:
+            city['country_label'] = row['label']
+            ordered.append(city)
+
+    ordered.extend(orphans)
     return ordered
 
 
